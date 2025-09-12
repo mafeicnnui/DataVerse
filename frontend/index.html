@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DataVerse - 辰域运维平台</title>
+    <!-- 仅使用 SVG favicon（等比不变形），避免 PNG 回退导致压扁 -->
+    <link rel="icon" href="/favicon.svg?v=12" type="image/svg+xml" />
+    <link rel="shortcut icon" href="/favicon.svg?v=12" type="image/svg+xml" />
+    <!-- 农历库改由 App.vue 中的 ensureLunarLib() 动态加载，避免 parser-blocking 与控制台警告 -->
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+    <script>
+      // 动态生成标准方形 favicon（16/32/180），保持等比，最大化兼容
+      (function() {
+        const SRC = '/dataverse_logo.png?v=11'
+        const sizes = [32, 16, 180]
+        function upsertIcon(rel, sizes, href) {
+          const selector = sizes ? `link[rel="${rel}"][sizes="${sizes}x${sizes}"]` : `link[rel="${rel}"]`
+          let link = document.querySelector(selector)
+          if (!link) {
+            link = document.createElement('link')
+            link.rel = rel
+            if (sizes) link.sizes = `${sizes}x${sizes}`
+            document.head.appendChild(link)
+          }
+          link.type = 'image/png'
+          link.href = href
+        }
+        function drawSquare(img, S) {
+          const W = img.naturalWidth || img.width
+          const H = img.naturalHeight || img.height
+          const canvas = document.createElement('canvas')
+          canvas.width = S
+          canvas.height = S
+          const ctx = canvas.getContext('2d')
+          const scale = Math.min(S / W, S / H)
+          const drawW = Math.round(W * scale)
+          const drawH = Math.round(H * scale)
+          const dx = Math.round((S - drawW) / 2)
+          const dy = Math.round((S - drawH) / 2)
+          ctx.imageSmoothingQuality = 'high'
+          ctx.clearRect(0, 0, S, S)
+          ctx.drawImage(img, dx, dy, drawW, drawH)
+          return canvas.toDataURL('image/png')
+        }
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        img.onload = function() {
+          try {
+            sizes.forEach(S => {
+              const url = drawSquare(img, S)
+              upsertIcon('icon', S, url)
+            })
+            // iOS Pinned
+            const url180 = drawSquare(img, 180)
+            upsertIcon('apple-touch-icon', 180, url180)
+            // 兼容旧行为
+            upsertIcon('shortcut icon', null, drawSquare(img, 32))
+          } catch {}
+        }
+        img.onerror = function() {}
+        img.src = SRC
+      })()
+    </script>
+  </body>
+</html>

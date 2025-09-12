@@ -1,0 +1,161 @@
+*{box-sizing:border-box}body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,sans-serif;margin:0;color:#222;background:#f6f8fb}
+html, body, #app { height: 100%; }
+
+/* --- 主题变量（便于后续细调） --- */
+:root{
+  --accent:#0b57d0;
+  --accent-2:#3b82f6;
+  --ok:#22c55e;
+  --warn:#f97316;
+  --danger:#ef4444;
+  /* 统一的侧栏宽度变量 */
+  --sidebar-width: 232px; /* 收窄侧栏，右缘与按钮更贴齐 */
+  --sidebar-width-collapsed: 64px;
+  /* 浅色侧栏主题 v2（更高对比与清爽） */
+  --sidebar-bg-start:#f9fbff; /* 顶部偏白 */
+  --sidebar-bg-end:#eef3ff;   /* 底部淡蓝 */
+  --sidebar-border:#dbe3ff;   /* 淡蓝描边 */
+  --sidebar-text:#1f2a44;     /* 深蓝灰文字：更高对比 */
+  --sidebar-muted:#5b6b88;    /* 次级文字 */
+  --sidebar-active:#e7efff;   /* 选中底色 */
+  --sidebar-hover:#f2f6ff;    /* 悬停底色 */
+  --main-bg:#f6f8fb;          /* 主区域底色 */
+  --card-bg:#ffffff;
+  --card-border:#e5e7eb;
+  --shadow:0 6px 20px rgba(17,24,39,.08);
+  /* 分隔竖线相对侧栏的偏移；设为 0 让分隔线贴侧栏右缘，消除中间空白区 */
+  --divider-offset: 0px;
+  /* 切换按钮宽度（用于使按钮居中对齐分隔线） */
+  --toggle-width: 24px;
+  /* 主内容左侧内边距（靠近侧栏的一侧），可设为 0 以彻底贴边 */
+  --content-left-pad: 14px; /* 与右侧一致，保证左右边框视觉对称 */
+}
+
+/* --- 布局容器 --- */
+.app-layout{display:flex; height:100%; background:var(--main-bg); position:relative;} 
+
+/* --- 左侧功能菜单（侧边栏） --- */
+.sidebar{
+  width: var(--sidebar-width); flex: 0 0 var(--sidebar-width); height: 100%;
+  background: linear-gradient(180deg, var(--sidebar-bg-start), var(--sidebar-bg-end));
+  color: var(--sidebar-text);
+  border-right: none; /* 改由 .preview 的左边框作为分隔线 */
+  /* 去除右侧阴影，避免在内容区形成额外竖线视觉 */
+  box-shadow: none;
+  position: relative; z-index: 4;
+}
+/* 取消背景扩展，避免进入内容区产生浅色竖带 */
+.sidebar .brand{ display:flex; align-items:center; gap:10px; padding:16px 14px; border-bottom:1px solid rgba(255,255,255,.06); }
+.sidebar .brand-logo{ width:28px; height:28px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.2)); }
+.sidebar .brand-name{ font-weight:600; letter-spacing:.5px; color:#223b6a; text-shadow: 0 1px 1px rgba(255,255,255,.7); }
+.sidebar nav{ padding:8px 8px 16px; }
+.sidebar nav ul{ list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:6px; }
+.sidebar nav li{ position:relative; display:flex; align-items:center; gap:10px; padding:12px 12px; margin:0 8px; border-radius:10px; cursor:pointer; color:var(--sidebar-text); transition: all .18s ease; border:1px solid transparent; }
+.sidebar nav li .mi{ display:inline-flex; width:18px; height:18px; color:#2563eb; }
+.sidebar nav li::before{ content:""; position:absolute; left:-1px; top:8px; bottom:8px; width:3px; border-radius:2px; background:transparent; transition: all .18s ease; }
+.sidebar nav li:hover{ background:var(--sidebar-hover); border-color:#c7d2fe; box-shadow: 0 2px 10px rgba(59,130,246,.08); }
+.sidebar nav li:hover::before{ background:#b7c7ff; opacity:.8; }
+.sidebar nav li.active{ background:var(--sidebar-active); color:#0b57d0; border-color:#a5b4fc; box-shadow: 0 4px 14px rgba(59,130,246,.12); font-weight:600; }
+.sidebar nav li.active::before{ background:#5b7cff; }
+.sidebar nav li.active .mi{ color:#2563eb; }
+.sidebar nav li.group .group-title{ display:flex; align-items:center; justify-content:space-between; padding:10px 10px; margin:0 6px; border-radius:10px; color:var(--sidebar-text); cursor:pointer; background:transparent; border:1px solid transparent; }
+.sidebar nav li.group .group-title:hover{ background:var(--sidebar-hover); border-color:#c7d2fe; }
+.sidebar nav li.group .mi-wrap{ display:flex; align-items:center; gap:10px; }
+.sidebar nav li.group .arrow{ color:#9db5ff; transition: transform .18s ease; }
+.sidebar nav li.group .arrow.open{ transform: rotate(90deg); color:#6b8cff; }
+.sidebar nav li .sub{ margin:6px 10px 8px 34px; padding:6px 6px 6px 10px; border-left:2px solid #c7d2fe; display:flex; flex-direction:column; gap:4px; background:transparent; border-radius:8px; box-shadow:none; }
+.sidebar nav li .sub li{ padding:6px 8px; border-radius:6px; color:#1f3b66; }
+.sidebar nav li .sub li:hover{ background:#eef4ff; }
+.sidebar nav li .sub li.active{ background:#dfe9ff; color:#0b57d0; font-weight:600; }
+
+/* 折叠模式（与 App.vue 的 .collapsed 配合） */
+.app-layout.collapsed .sidebar{ width: var(--sidebar-width-collapsed); flex-basis:var(--sidebar-width-collapsed); }
+.app-layout.collapsed .sidebar .brand-name{ display:none; }
+.app-layout.collapsed .sidebar nav li span:not(.mi){ display:none; }
+.app-layout.collapsed .sidebar nav li{ justify-content:center; padding:10px 8px; }
+.app-layout.collapsed .sidebar nav li.group .group-title{ justify-content:center; }
+.app-layout.collapsed .sidebar nav li .sub{ margin-left:16px; }
+
+/* --- 右侧主区域与头部 --- */
+.preview{ flex:1 1 auto; min-width:0; height:100%; display:flex; flex-direction:column; position:relative; z-index: 1; border-left:none; }
+/* 恢复由侧栏伪元素提供分隔线 */
+.sidebar::after{ content:""; position:absolute; top:0; bottom:0; right: calc(-1 * var(--divider-offset)); width:1px; background: var(--sidebar-border); pointer-events:none; z-index: 3; }
+.top-info{ display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:12px; padding:10px 14px 10px var(--content-left-pad); background:linear-gradient(180deg, #ffffffdd, #ffffffaa); backdrop-filter:saturate(180%) blur(4px); border-bottom:1px solid #e6eaf5; position:sticky; top:0; z-index:6; }
+.top-info .info-left, .top-info .info-center, .top-info .info-right{ display:flex; align-items:center; gap:10px; color:#1f2a44; }
+.tabs-bar{ display:flex; align-items:center; gap:8px; padding:8px 10px 8px var(--content-left-pad); background:linear-gradient(180deg,#f8fbff,#f3f6fb); border-bottom:1px solid #e6eaf5; }
+.tab-item{ display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:8px; background:#fff; border:1px solid #e5e7eb; color:#334155; cursor:pointer; box-shadow: var(--shadow); }
+.tab-item.active{ border-color:#c7d2fe; background:linear-gradient(180deg,#ffffff,#f8faff); color:#0b57d0; }
+.tab-item .tab-close{ opacity:.6; }
+.tab-item:hover .tab-close{ opacity:1; }
+
+/* --- 容器与卡片 --- */
+.container{ padding:14px 14px 14px var(--content-left-pad); }
+.card{ background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; box-shadow: var(--shadow); }
+.section-title{ font-size:18px; color:#0b57d0; margin:0 0 10px 0; font-weight:600; }
+
+/* 覆盖作用域选择器的主内容内边距设置 */
+.app-layout main.preview { overflow-y: hidden; }
+
+/* --- 通用模态窗口样式（控制台使用） --- */
+.dv-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: stretch; justify-content: stretch; }
+.dv-modal-backdrop { position: absolute; inset: 0; background: rgba(15,23,42,0.45); }
+.dv-modal-panel { position: relative; width: 100vw; height: 100vh; background: #fff; border-radius: 0; box-shadow: none; display: flex; flex-direction: column; overflow: hidden; }
+.dv-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; }
+.dv-modal-panel .section-block { margin: 12px 16px; }
+.dv-modal-panel .tq-main { margin: 0 16px 16px; }
+.dv-modal-panel .tq-right { min-width: 0; }
+.dv-modal-panel .tq-result { height: 100%; }
+
+/* 只读连接显示 */
+.tq-conn-readonly { min-width: 240px; max-width: 420px; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* 禁用态下拉（数据库多选） */
+.tq-db-multi.disabled { opacity: .75; pointer-events: none; }
+
+/* 覆盖作用域选择器的主内容内边距设置 */
+.app-layout .preview[data-v-7a7a37b1]{
+  padding: 0 20px 0 50px !important;
+}
+/* 折叠侧栏时，主预览区左右内边距保持一致，避免左右不对称 */
+.app-layout.collapsed .preview[data-v-7a7a37b1]{
+  padding: 0 20px !important;
+}
+
+/* --- 工具按钮（与组件内 .icon-btn 视觉协调） --- */
+.icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:6px; border:1px solid #c9c9c9; background:#fff; color:#333; cursor:pointer; }
+.icon-btn.add{ background:#e8f0fe; border-color:#3b82f6; color:#0b57d0; }
+.icon-btn.add:hover{ background:#dbe8ff; }
+.icon-btn.warn{ background:#fee2e2; border-color:#ef4444; color:#b91c1c; }
+.icon-btn.warn:hover{ background:#fecaca; }
+
+/* --- 侧边收起/展开按钮 --- */
+.toggle-btn{ position:absolute; left: calc(var(--sidebar-width) - (var(--toggle-width) / 2)) !important; top:50%; transform:translateY(-50%); z-index:5; width: var(--toggle-width); height:48px; border-radius:0 8px 8px 0; border:1px solid #c7d2fe; border-left:none; background:linear-gradient(180deg,#eef2ff,#e0e7ff); color:#0b57d0; cursor:pointer; box-shadow: 2px 0 12px rgba(15,23,42,.15); box-sizing: border-box; }
+.app-layout.collapsed .toggle-btn{ left: 0 !important; border-radius: 0 8px 8px 0; }
+.toggle-btn .arrow-text{ font-weight:700; font-size:14px; }
+
+/* --- 全局：统一的操作按钮样式（供分离组件复用） --- */
+/* 优先写在文件末尾，覆盖前面零散定义，保证各组件一致 */
+/* 基础按钮 */
+body .icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:6px; border:1px solid #c9c9c9; background:#fff; color:#333; cursor:pointer; transition: background-color .15s ease, box-shadow .15s ease; }
+body .icon-btn.sm{ width:28px; height:28px; }
+body .icon-btn:hover{ background:#f5f7ff; }
+/* 信息/编辑类 */
+body .icon-btn.info{ border-color:#3b82f6; color:#0b57d0; background:#e8f0fe; }
+body .icon-btn.info:hover{ background:#dbe8ff; }
+/* 危险/删除类（与删除确认弹窗一致） */
+body .icon-btn.warn{ border-color:#ef4444; color:#dc2626; background:#ffffff; }
+body .icon-btn.warn:hover{ background:#fee2e2; }
+body .icon-btn.warn:active{ background:#fde2e2; }
+body .icon-btn.warn:focus-visible{ outline: 2px solid #fecaca; outline-offset: 2px; }
+/* 测试/成功类 */
+body .icon-btn.test{ border-color:#22c55e; color:#15803d; background:#eefdf3; }
+body .icon-btn.test:hover{ background:#dcfce7; }
+/* 连接控制台按钮 */
+body .icon-btn.console{ border-color:#8b5cf6; color:#6d28d9; background:#f5f3ff; }
+body .icon-btn.console:hover{ background:#ede9fe; }
+/* 弹窗动作区按钮尺寸稍大 */
+.modal .actions .icon-btn{ width:36px; height:36px; }
+
+/* 统一弹窗标题图标尺寸与对齐（避免拆分后 SVG 过大） */
+.modal-header h2.with-icon{ display:flex; align-items:center; gap:8px; }
+.modal-header h2.with-icon svg{ width:18px; height:18px; flex:0 0 18px; }

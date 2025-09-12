@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Square SVG wrapper that preserves the aspect ratio of dataverse_logo.png -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 64 64">
+  <!-- Optional background; keep transparent by default -->
+  <rect width="64" height="64" fill="none"/>
+  <!-- Fill the canvas to maximize visibility at 16px; preserve aspect ratio -->
+  <image href="/dataverse_logo.png" x="0" y="0" width="64" height="64" preserveAspectRatio="xMidYMid meet"/>
+  <!-- If the logo has surrounding transparent space, you can adjust x/y/width/height to better fit -->
+  <title>DataVerse</title>
+</svg>
