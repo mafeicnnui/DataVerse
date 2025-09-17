@@ -1,24 +1,3 @@
-function onConnChange(ev: Event) {
-  try {
-    const val = (ev.target as HTMLSelectElement).value
-    const id = /^\d+$/.test(val) ? Number(val) : val
-    // 更新选中连接并刷新菜单树/数据库列表
-    try { (state as any).selectedConnId = id } catch {}
-    // 清空与上个连接相关的选择/展开/过滤
-    try { state.selectedDbs = [] } catch {}
-    try { (state as any).expandedDb = {} } catch {}
-    try { state.filter = '' } catch {}
-    try { state.tables = {} as any } catch {}
-    try { state.selectedDb = '' as any } catch {}
-    // 关闭下拉并重新加载数据库
-    try { state.dbDropdownOpen = false } catch {}
-    try { state.databases = [] as any } catch {}
-    // 重新加载数据库列表
-    try { (state as any).loadDatabases ? (state as any).loadDatabases() : null } catch {}
-    // 若组合式未暴露 loadDatabases，则走 initConsole 兜底
-    try { initConsole(id as any) } catch {}
-  } catch {}
-}
 <template>
   <div class="dv-sql-console" :class="mode">
     <!-- 页面模式显示标题：控制台 [user@ip:port] -->
@@ -262,6 +241,7 @@ const {
   toggleLeftCollapsed,
   exportCSV,
   exportExcel,
+  loadDatabases,
   loadTables,
   // tabs api from composable
   newQueryTab,
@@ -275,6 +255,27 @@ const dbSummaryRef = ref<HTMLElement | null>(null)
 const dbPanelWidth = ref<number>(240)
 // 用于对齐每行文本列宽，让所有行的选中标记/后续图标对齐
 const dbNameColWidth = ref<number>(0)
+
+// 切换连接：重置选择并刷新数据库与菜单树
+async function onConnChange(ev: Event) {
+  try {
+    const val = (ev.target as HTMLSelectElement).value
+    const id = /^\d+$/.test(val) ? Number(val) : val
+    // 更新选中连接
+    try { (state as any).selectedConnId = id } catch {}
+    // 清空与上个连接相关的状态
+    try { state.selectedDbs = [] } catch {}
+    try { (state as any).expandedDb = {} } catch {}
+    try { state.filter = '' } catch {}
+    try { state.tables = {} as any } catch {}
+    try { state.selectedDb = '' as any } catch {}
+    try { state.dbDropdownOpen = false } catch {}
+    try { state.databases = [] as any } catch {}
+    // 重新加载数据库列表并兜底初始化
+    try { await loadDatabases() } catch {}
+    try { await initConsole(id as any) } catch {}
+  } catch {}
+}
 
 
 function toggleDbExpand(db: string) {
