@@ -21,6 +21,11 @@ function onConnChange(ev: Event) {
 }
 <template>
   <div class="dv-sql-console" :class="mode">
+    <!-- 页面模式显示标题：控制台 [user@ip:port] -->
+    <div v-if="mode==='page'" class="tq-title">
+      <span class="t">控制台</span>
+      <span class="i">[{{ connLabel }}]</span>
+    </div>
     <!-- 工具栏（与 App.vue 浮层结构保持一致的精简版本） -->
     <div class="card section-block tq-toolbar">
       <div class="tq-toolbar-row grid-12">
@@ -103,6 +108,10 @@ function onConnChange(ev: Event) {
           <!-- 在新窗口打开（轻量跳转） -->
           <button class="icon-btn" title="在新窗口打开" @click="openInNewWindow">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3ZM5 5h7v2H7v10h10v-5h2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/></svg>
+          </button>
+          <!-- 回主页面打开浮动控制台（仅页面模式显示） -->
+          <button v-if="mode==='page'" class="icon-btn" title="回主页面打开浮动控制台" @click="openInOpener">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8h5z"/></svg>
           </button>
         </div>
       </div>
@@ -203,6 +212,21 @@ const props = withDefaults(defineProps<Props>(), {
   mode: 'modal'
 })
 
+// 在主页面打开浮动控制台（独立页回到父窗口）
+function openInOpener() {
+  try {
+    if (!window.opener) throw new Error('no opener')
+    const same = (() => { try { return window.opener.location.origin === window.location.origin } catch { return false } })()
+    if (!same) throw new Error('different origin')
+    const payload: any = { connId: state.selectedConnId, database: state.selectedDb || '', sql: state.sql || '' }
+    // 将 SQL 限制长度，避免过长消息（可选）
+    try { if (payload.sql && payload.sql.length > 50000) payload.sql = payload.sql.slice(0, 50000) } catch {}
+    window.opener.postMessage({ type: 'open-sql-modal', payload }, window.location.origin)
+    try { window.opener.focus() } catch {}
+  } catch (e) {
+    alert('未检测到主页面或跨域，无法自动打开。请手动切回主页面。')
+  }
+}
 // 轻量打开新窗口：仅携带一次性参数，互不同步
 function openInNewWindow() {
   try {
@@ -214,7 +238,8 @@ function openInNewWindow() {
     if (state.selectedDb) params.set('database', state.selectedDb)
     if (state.sql && state.sql.trim()) params.set('sql', encodeURIComponent(state.sql))
     const url = `${base}?${params.toString()}`
-    window.open(url, '_blank', 'noopener')
+    // 不使用 noopener，保证 window.opener 可用于回到主页面打开浮动层（同源）
+    window.open(url, '_blank')
   } catch {}
 }
 
@@ -559,6 +584,9 @@ provide('tqCtx', {
 
 <style scoped>
 .dv-sql-console { height: 100vh; display: flex; flex-direction: column; }
+.tq-title { flex: 0 0 auto; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #fff; display:flex; align-items:center; gap:8px; }
+.tq-title .t { font-size: 18px; line-height: 22px; font-weight: 700; color: #1d4ed8; letter-spacing: .2px; }
+.tq-title .i { font-size: 14px; line-height: 20px; color: #6b7280; }
 .card.section-block.tq-toolbar { flex: 0 0 auto; }
 /* 顶部与内容之间的留白，贴近工单查询 */
 .tq-main { margin-top: 8px; }

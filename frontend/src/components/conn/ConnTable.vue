@@ -180,7 +180,8 @@ function openStandalone(item) {
     const id = item?.id
     if (!id) return
     const url = `/db-console.html?connId=${encodeURIComponent(id)}`
-    window.open(url, '_blank', 'noopener')
+    // 不使用 noopener，保证同源时 window.opener 可用于回到主页面打开浮动层
+    window.open(url, '_blank')
   } catch {}
 }
 

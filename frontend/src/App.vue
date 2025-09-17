@@ -2828,6 +2828,45 @@ onMounted(async () => {
       openConsole(id)
     })
   } catch {}
+
+  // 监听来自独立 SQL 页的 postMessage，请求在主页面打开浮动控制台
+  try {
+    window.addEventListener('message', async (ev) => {
+      try {
+        // 仅处理同源消息
+        if (ev.origin !== window.location.origin) return
+        const data = ev.data || {}
+        if (data && data.type === 'open-sql-modal') {
+          const payload = data.payload || {}
+          const connId = payload.connId
+          const database = payload.database
+          const sql = payload.sql
+          if (connId) {
+            await openConsole(connId)
+          } else {
+            // 没有 connId 则仅确保浮动控制台可见
+            await openConsole(tq?.selectedConnId || consoleModal.connId)
+          }
+          // 一次性应用数据库与 SQL（如有）
+          try { if (database) tq.selectedDb = database } catch {}
+          try {
+            if (sql) {
+              tq.sql = sql
+              // 若编辑器存在，强制更新一次内容
+              try {
+                if (typeof window.__tqEnsure === 'function') window.__tqEnsure()
+                const v = window && window.__tqEditorView
+                if (v && v.state) {
+                  const cur = v.state.doc.toString()
+                  if (cur !== sql) v.dispatch({ changes: { from: 0, to: cur.length, insert: sql } })
+                }
+              } catch {}
+            }
+          } catch {}
+        }
+      } catch {}
+    })
+  } catch {}
 })
 
 const filteredList = computed(() => {
