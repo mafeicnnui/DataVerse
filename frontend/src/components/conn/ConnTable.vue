@@ -74,6 +74,12 @@
                     <path d="M15.5 13.1v4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
                   </svg>
                 </button>
+                <!-- 独立控制台（新窗口）：紧挨在 SQL 控制台 右侧 -->
+                <button class="icon-btn sm" @click="openStandalone(item)" title="独立控制台(新窗口)" aria-label="独立控制台(新窗口)">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                    <path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3ZM5 5h7v2H7v10h10v-5h2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/>
+                  </svg>
+                </button>
               </td>
             </tr>
           </tbody>
@@ -165,8 +171,16 @@ function adjustHeaderGutter() {
     if (!cmScrollXRef.value || !cmBodyRef.value) return
     const gutter = getScrollbarWidth(cmBodyRef.value)
     headerGutter.value = gutter || 0
-    // 使用 header padding-right 进行补偿
     if (cmScrollXRef.value) cmScrollXRef.value.style.paddingRight = (gutter || 0) + 'px'
+  } catch {}
+}
+
+function openStandalone(item) {
+  try {
+    const id = item?.id
+    if (!id) return
+    const url = `/db-console.html?connId=${encodeURIComponent(id)}`
+    window.open(url, '_blank', 'noopener')
   } catch {}
 }
 

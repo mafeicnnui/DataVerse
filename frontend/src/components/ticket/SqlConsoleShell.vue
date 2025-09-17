@@ -100,6 +100,10 @@ function onConnChange(ev: Event) {
           <button class="icon-btn" title="导出 Excel" @click="exportExcel" :disabled="!(state.result && state.result.type==='table')">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h9a1 1 0 0 1 1 1v3h6v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm9 5V6H5v12h14V9h-6Zm-6.5 7 2.75-4L6.5 8h2.3l1.55 2.6L11.9 8h2.3l-2.75 4 2.75 4h-2.3l-1.55-2.6L8.8 16H6.5Z"/></svg>
           </button>
+          <!-- 在新窗口打开（轻量跳转） -->
+          <button class="icon-btn" title="在新窗口打开" @click="openInNewWindow">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3ZM5 5h7v2H7v10h10v-5h2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/></svg>
+          </button>
         </div>
       </div>
     </div>
@@ -190,12 +194,29 @@ import SqlEditor from './SqlEditor.vue'
 
 interface Props {
   initConnId?: number | string
+  initDb?: string
+  initSql?: string
   mode?: 'modal' | 'page'
 }
 
 const props = withDefaults(defineProps<Props>(), {
   mode: 'modal'
 })
+
+// 轻量打开新窗口：仅携带一次性参数，互不同步
+function openInNewWindow() {
+  try {
+    const base = '/db-console.html'
+    const params = new URLSearchParams()
+    if (state.selectedConnId != null && String(state.selectedConnId).trim() !== '') {
+      params.set('connId', String(state.selectedConnId))
+    }
+    if (state.selectedDb) params.set('database', state.selectedDb)
+    if (state.sql && state.sql.trim()) params.set('sql', encodeURIComponent(state.sql))
+    const url = `${base}?${params.toString()}`
+    window.open(url, '_blank', 'noopener')
+  } catch {}
+}
 
 const {
   state,
@@ -254,6 +275,18 @@ onMounted(async () => {
   if (props.initConnId != null) {
     await initConsole(props.initConnId)
   }
+  // 一次性应用初始库与初始 SQL（若提供）
+  try {
+    if (props.initDb) {
+      state.selectedDb = props.initDb
+      if (props.initConnId) try { await loadTables(props.initDb) } catch {}
+    }
+  } catch {}
+  try {
+    if (props.initSql) {
+      state.sql = props.initSql
+    }
+  } catch {}
   // 栅格布局，无需动态测量宽度
   pageInput.value = (state.page as unknown as number) || 1
   // 若无标签，创建一个默认标签，避免仅出现“+”
