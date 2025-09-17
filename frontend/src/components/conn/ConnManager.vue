@@ -237,14 +237,20 @@ async function onTest(item) {
 }
 
 function onConsole(item) {
-  // 预留：与“工单查询”联动（可将 item.id 写入全局/本地存储，或发出全局事件供 App.vue 捕获）
+  // 触发打开控制台事件，由主应用处理
   try {
-    const label = `${item.ip}:${item.port}`
-    message.value = `准备打开控制台: ${label}`
-    // 示例：设置一个全局提示或本地存储，后续在 App.vue 中对接打开工单查询并选中连接
-    localStorage.setItem('pending_console_conn_id', String(item.id))
-    window.dispatchEvent(new CustomEvent('dv:open-console', { detail: { connId: item.id } }))
-  } catch {}
+    const label = item.description || `${item.ip}:${item.port}` || `#${item.id}`
+    message.value = `正在打开控制台: ${label}`
+    
+    // 发送自定义事件到主应用
+    window.dispatchEvent(new CustomEvent('open-console', {
+      detail: { connId: item.id }
+    }))
+    
+    message.value = `已打开控制台: ${label}`
+  } catch (e) {
+    message.value = `打开控制台失败: ${e.message}`
+  }
 }
 
 const filteredList = computed(() => {

@@ -2801,8 +2801,25 @@ onMounted(async () => {
   // 再加一次延时清理，兼容部分浏览器延迟填充
   setTimeout(() => {
     resetForm()
-    formKey.value++
+    formKey.value = 1
   }, 300)
+  
+  // 原有的事件监听
+  window.addEventListener('beforeunload', () => {
+    if (ws.value && ws.value.readyState === WebSocket.OPEN) {
+      ws.value.close()
+    }
+  })
+  
+  // 监听来自连接管理的"打开控制台"事件
+  try {
+    window.addEventListener('open-console', (event) => {
+      const id = event.detail?.connId
+      if (!id) return
+      openConsole(id)
+    })
+  } catch {}
+  
   // 监听来自连接管理的“打开控制台”事件
   try {
     window.addEventListener('dv:open-console', (ev) => {
