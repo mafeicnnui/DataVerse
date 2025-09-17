@@ -1,21 +1,33 @@
 # Data Verse 星域运维平台
 
-一个包含 FastAPI 后端与 Vue 3 前端的全栈项目，用于管理数据库连接信息（首期支持 MySQL）：新增、修改、删除、列表与连通性测试。
+一个包含 FastAPI 后端与 Vue 3 前端的全栈项目，用于数据库与主机统一运维：
 
-后端使用 MySQL 存储连接信息（通过 SQLAlchemy 异步引擎 + aiomysql），并提供 RESTful API；前端基于 Vite + Vue 3，调用后端接口进行管理。
+- 连接管理（MySQL）：新增/修改/删除/列表/连通性测试
+- 主机管理：WebSSH 控制台、多标签会话、最小化与右下角气泡还原、SFTP 文件传输
+- SQL 控制台：与连接管理联动，支持全屏浮窗、数据库/表树、SQL 编辑/执行、结果导出
+
+后端使用 MySQL 存储连接与主机信息（SQLAlchemy 异步引擎 + aiomysql），并提供 RESTful + WebSocket（SSH）接口；前端基于 Vite + Vue 3，实现控制台与文件传输等交互。
 
 ---
 
 ## 功能特性
 - 连接管理（MySQL）
   - 新增、查询、更新、删除
-  - 连通性测试（使用 PyMySQL）
-- RESTful API，内置 Swagger 文档 `/docs`
+  - 连通性测试（PyMySQL）![alt text](image.png)
+- 主机管理（SSH）
+  - WebSSH 控制台（xterm.js + FastAPI WebSocket）
+  - 多标签会话、重连、最小化到气泡、从气泡一键还原
+  - SFTP 文件传输（上传/下载、进度/日志、历史与排序）
+- SQL 控制台
+  - 全屏浮窗布局、数据库/表树、编辑器自动补全
+  - 执行/停止/导出 CSV/Excel、分页与排序
+  - 支持新窗口打开与 URL 直达、按标签页绑定连接、标签悬浮显示连接描述
+- RESTful API + Swagger `/docs`
 - CORS 已开启，默认允许 `http://localhost:5173`
 
 ---
 
-## 目录结构
+## 目录结构（精简）
 ```
 ./
 ├─ backend/
@@ -23,23 +35,49 @@
 │  │  ├─ api/
 │  │  │  ├─ deps.py
 │  │  │  └─ routes/
-│  │  │     └─ connections.py
+│  │  │     ├─ connections.py   # 连接管理 CRUD + 测试
+│  │  │     ├─ servers.py       # 主机管理 CRUD + 测试
+│  │  │     ├─ dicts.py         # 字典（类型/环境/状态等）
+│  │  │     ├─ ticket.py        # SQL 控制台（表/列等数据）
+│  │  │     └─ ssh.py           # WebSSH(WS) 与 SFTP（list/upload/download）
 │  │  ├─ core/
-│  │  │  └─ config.py
+│  │  │  └─ config.py           # 配置与环境变量
 │  │  ├─ db/
 │  │  │  └─ base.py
 │  │  ├─ models/
-│  │  │  └─ connection.py   # ORM 映射到 MySQL 表 t_db_source
+│  │  │  ├─ connection.py       # ORM: t_db_source
+│  │  │  └─ server.py           # ORM: t_server
 │  │  ├─ schemas/
-│  │  │  └─ connection.py
-│  │  └─ main.py
+│  │  │  ├─ connection.py
+│  │  │  └─ server.py
+│  │  └─ main.py                # FastAPI 入口（包含 CORS、中间件与路由）
 │  └─ requirements.txt
 ├─ frontend/
 │  ├─ index.html
 │  ├─ package.json
-│  ├─ vite.config.js
+│  ├─ vite.config.js            # /api 代理到后端
 │  └─ src/
+│     ├─ api.js                 # axios 封装（baseURL=/api）
+│     ├─ App.vue                # 主界面：侧边导航、工单/连接/主机等
+│     ├─ components/
+│     │  ├─ conn/               # 连接管理（表格/表单/工具条）
+│     │  ├─ server/HostManager.vue    # 主机管理列表与入口
+│     │  └─ console/            # 控制台相关
+│     │     ├─ ConsoleManager.vue      # 控制台窗口（多标签 SSH/FTP）
+│     │     ├─ ConsoleBubbles.vue      # 右下角最小化气泡
+│     │     ├─ WebSSH.vue              # WebSSH 终端（xterm.js）
+│     │     └─ FileTransferDialog.vue  # SFTP 文件传输
+│     │
+│     │  └─ ticket/            # 备注：SQL 控制台已默认启用高亮与补全，无需 `?cm=on` 参数。
+│     │     ├─ SqlTabs.vue
+│     │     ├─ SqlEditor.vue
+│     │     └─ ResultTable.vue
 │     └─ main.js
+├─ scripts/                      # 开发辅助脚本（安全释放端口等）
+│  ├─ start_backend.bat
+│  ├─ start_frontend.bat
+│  ├─ start_frontend.ps1
+│  └─ image_tools/*
 └─ README.md
 ```
 
@@ -84,7 +122,7 @@ uvicorn app.main:app --reload --port 8000
   scripts\start_backend.bat [PORT] [APP_DIR] [DATABASE_URL] [--force]
   ```
   - 仅在监听进程为“当前用户”的开发类进程时才会结束（白名单：`python.exe`、`uvicorn.exe`）。
-  - 如检测为疑似系统/他人进程占用，将提示并退出（退出码 2），请更换端口或手动处理。
+  - 如检测为疑似系统/他人进程占用，将提示并退出（退出码 2），请更换端口或手工处理。
   - 可选 `--force` 将强制结束任意监听进程（不推荐，除非确认安全）。
   - 示例：
     ```bat
@@ -196,9 +234,31 @@ npm run dev
 
 3) 访问：
 - 前端开发地址（默认）：http://127.0.0.1:5173/
-- `vite.config.js` 已配置代理，将 `/api` 代理到 `http://127.0.0.1:8000`
+- `vite.config.js` 已配置代理，将 `/api` 代理到 `http://127.0.0.1:8001`
 
-> 当前仓库已放置前端基础脚手架。你可以基于后端 API 自行搭建页面，或后续补充我们提供的界面组件。
+> 前端已集成 Console（WebSSH/SFTP）与 SQL 控制台等模块，统一通过 `src/api.js` 调用后端 `/api/*` 接口。
+
+---
+
+## SQL 控制台使用说明（重要更新）
+
+- 新窗口打开：在“连接管理”中点击“SQL 控制台”将以新标签页打开完整控制台，窗口标题为：`DataVerse - SQL控制台`。
+- URL 直达：支持通过地址栏参数直达控制台并指定连接
+  - 示例：`http://<host>:5173/?view=sqlconsole&conn=123`
+  - `conn` 为连接 ID，`view=sql` 也兼容。
+- 连接下拉：控制台工具条左侧的“连接下拉框”展示所有有效连接，默认选中当前连接。
+- 标签页与连接绑定（多实例并行）：
+  - 每个 SQL 标签在“新建时”会固定绑定一个连接 ID（`connId`）。
+  - 切换连接下拉不会改写已有标签的绑定，而是“以所选连接新建一个新的 SQL 标签页”。
+  - 不同标签可面向不同连接/实例执行 SQL，互不影响。
+- TAB 悬浮提示：鼠标悬停于 SQL 标签页时，会显示该标签绑定连接的“描述信息”（若无描述则显示 `user@ip:port`）。
+- 顶部连接信息：控制台标题右侧的 `[user@ip:port]` 会随“当前激活的 SQL 标签”自动变化。
+
+> 以上行为均在前端 `frontend/src/App.vue` 与 `frontend/src/components/ticket/SqlTabs.vue` 中实现：
+> - `?view=sqlconsole&conn=<id>` 解析并自动打开控制台
+> - 标签 `connId` 固化与切换下拉“新建标签”行为
+> - 执行/执行计划请求以“当前标签的 connId”为准
+> - 标签 title 悬浮显示连接描述
 
 ---
 
@@ -309,70 +369,7 @@ curl -X POST http://127.0.0.1:8000/api/connections/1/test
 
 ---
 
-## 前端 E2E 测试 / Playwright 安装
-
-本项目前端可选用 Playwright 进行端到端（E2E）测试。以下为 Windows（PowerShell）环境的安装与常见问题处理步骤。
-
-### 安装步骤（建议按顺序执行）
-1) 以管理员身份运行 PowerShell
-   - 右键 PowerShell → 以管理员身份运行。
-
-2) 切换到项目目录（示例）
-   - 例如：`d:\work\windsurf\python\DataVerse`（请在你的项目根目录下操作）。
-
-3) 初始化并安装 Playwright 依赖
-```powershell
-npm init -y
-npm install -D @playwright/test
-```
-
-4)（推荐）将浏览器缓存目录设置到可写位置，避免权限/杀软拦截
-```powershell
-New-Item -ItemType Directory -Force -Path "D:\Playwright\ms-playwright" | Out-Null
-setx PLAYWRIGHT_BROWSERS_PATH "D:\Playwright\ms-playwright"
-```
-- 设置环境变量后请“重启 PowerShell”再继续。
-
-5)（可选）清理历史半成品下载
-```powershell
-Remove-Item -Recurse -Force "$env:USERPROFILE\AppData\Local\ms-playwright" -ErrorAction SilentlyContinue
-```
-
-6) 安装浏览器
-```powershell
-# 安装默认所需浏览器
-npx playwright install
-
-# 仅安装 Chromium（可选）
-npx playwright install chromium
-
-# 安装 Chrome 稳定版通道（如确需）
-npx playwright install chrome
-```
-
-7) 国内网络环境建议设置下载镜像后再安装
-```powershell
-setx PLAYWRIGHT_DOWNLOAD_HOST "https://npmmirror.com/mirrors/playwright"
-# 重启 PowerShell 生效后，重新执行：npx playwright install
-```
-
-### 常见问题排查
-- 权限不足/Failed to install browsers：
-  - 以管理员运行 PowerShell。
-  - 使用 `PLAYWRIGHT_BROWSERS_PATH` 指向可写目录（如 `D:\Playwright\ms-playwright`）。
-  - 检查杀毒/EDR 是否拦截，必要时为该目录加白名单。
-- 提示先安装依赖：先执行 `npm install` 或 `npm install -D @playwright/test` 再运行 `npx playwright install`。
-- 下载超时/被墙：配置 `PLAYWRIGHT_DOWNLOAD_HOST` 镜像，重启终端后重试。
-- 代理网络：按需设置 `HTTP_PROXY`/`HTTPS_PROXY` 环境变量。
-- 版本校验：
-```powershell
-node -v
-npm -v
-```
-
-> 说明：Playwright 默认将浏览器下载到 `C:\Users\<你>\AppData\Local\ms-playwright`。若该目录受限（权限/策略/杀软），请使用上文的环境变量改到可写路径。
-
----
+ 
 
 ## 常见问题
 - “表是否会自动创建？”
@@ -414,3 +411,4 @@ npm -v
 
 ## 许可
 本项目仅用于内部 PoC/演示，后续可根据需要选择合适的开源许可。
+![alt text](image.png)
