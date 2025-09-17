@@ -136,6 +136,188 @@
 
 ---
 
+## 连接管理（connections）
+
+前缀（参考）：`/api/connections` 或由 `backend/app/api/routes/connections.py` 挂载位置决定。
+
+1) 列表
+- GET `/api/connections/`
+- Resp: `ConnectionOut[]`
+
+2) 新增
+- POST `/api/connections/`
+- Body: `ConnectionCreate`
+- Resp: `ConnectionOut`
+
+3) 查询
+- GET `/api/connections/{conn_id}`
+- Resp: `ConnectionOut`
+
+4) 更新
+- PUT `/api/connections/{conn_id}`
+- Body: `ConnectionUpdate`
+- Resp: `ConnectionOut`
+
+5) 删除
+- DELETE `/api/connections/{conn_id}`
+- Resp: 204 No Content
+
+6) 连通性测试
+- POST `/api/connections/{conn_id}/test`
+- Resp: `{ "success": true }` 或 4xx 错误
+
+> 字段结构参考 `app/schemas/connection.py`。
+
+---
+
+## 主机管理（servers）
+
+前缀（参考）：`/api/servers`
+
+1) 列表
+- GET `/api/servers/`
+
+2) 新增
+- POST `/api/servers/`
+
+3) 查询
+- GET `/api/servers/{server_id}`
+
+4) 更新
+- PUT `/api/servers/{server_id}`
+
+5) 删除
+- DELETE `/api/servers/{server_id}`
+
+6) 连通性测试（TCP）
+- POST `/api/servers/{server_id}/test`
+- Resp: `{ "success": true }`
+
+> 字段结构参考 `app/schemas/server.py`。
+
+---
+
+## 字典（dicts）
+
+前缀：`/api/dicts`
+
+1) 获取某字典项
+- GET `/api/dicts/{dm}`
+- Resp: `[{ dm, dmm, dmmc, status }]`
+
+---
+
+## SSH & SFTP
+
+前缀：`/api/ssh`
+
+1) WebSocket 终端
+- WS `/api/ssh/ws?host=1.2.3.4&port=22&user=root&pass=xxx&auth=password`
+- 额外支持：公钥方式 `auth=key&key_b64=<base64>`（可选 `key_pass`）
+- 客户端可发送：
+  - 终端输入数据（原样转发）
+  - `__RESIZE__:120x32` 调整终端大小
+  - `__PING__` 心跳（后端忽略）
+- 服务端会在会话结束时发送：`{"type":"exit","code":<exit_status>}`
+
+2) SFTP 列目录
+- POST `/api/ssh/sftp/list`
+- Form-Data：`host, port, user, auth=password|key, path=~|/var/log, password? , key_b64? , key_pass?`
+- Resp：`[{ name, path, kind: 'file'|'directory', size?, mtime? }]`
+- 行为：
+  - 支持 `~` 与 `~/xxx`，会解析为家目录
+  - 目录优先排序
+  - 对个别系统编码问题，内置 `ls` 兜底解析
+
+3) SFTP 上传
+- POST `/api/ssh/sftp/upload`
+- Form-Data：`file=<binary>` 以及与 list 相同连接字段，`path` 为目标目录（默认 `~`）
+- Resp：`{ ok: true, path: "/remote/path/xxx" }`
+
+4) SFTP 下载
+- POST `/api/ssh/sftp/download`
+- Form-Data：同上，`path` 为远端文件完整路径
+- Resp：`application/octet-stream` 附件下载
+
+> 服务器连接由 asyncssh 管理，已设置合理的连接与登录超时，确保前端不会长时间卡住。
+
+---
+
+## 统一返回结构（建议）
+
+为便于前端统一处理，推荐后端（在不破坏现有接口的前提下）增加一个包裹层：
+
+```json
+// 成功
+{
+  "code": 0,
+  "message": "ok",
+  "data": { /* 原始 payload，例如 {data,columns,total,...} */ }
+}
+
+// 失败
+{
+  "code": 1001,
+  "message": "连接不存在或不可用",
+  "data": null
+}
+```
+
+当前前端已向下兼容“裸返回”的 `{data,columns}` / `{rows,columns}` / `string` 等多种形态。
+
+---
+
+## cURL 示例
+
+以下示例以 `connId=1`、数据库 `hopsonone_members`、表 `members` 为例：
+
+1) 连接列表
+```bash
+curl -s http://127.0.0.1:5173/connections
+```
+
+2) 数据库列表
+```bash
+curl -s "http://127.0.0.1:5173/ticket/databases?connId=1"
+# 兜底：
+curl -s http://127.0.0.1:5173/connections/1/databases
+```
+
+3) 表列表
+```bash
+curl -s "http://127.0.0.1:5173/ticket/tables?connId=1&db=hopsonone_members"
+```
+
+4) 列列表（优先 /api 路径）
+```bash
+curl -s "http://127.0.0.1:5173/api/ticket/columns?connId=1&id=1&connectionId=1&db=hopsonone_members&database=hopsonone_members&schema=hopsonone_members&table=members&tableName=members&tbl=members&format=json"
+```
+
+5) 执行 SQL
+```bash
+curl -s -X POST http://127.0.0.1:5173/api/ticket/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connId": 1,
+    "database": "hopsonone_members",
+    "sql": "SELECT m.m_mobile FROM hopsonone_members.members m LIMIT 10;",
+    "page": 1,
+    "pageSize": 50
+  }'
+```
+
+---
+
+## 常见错误排查（扩展）
+
+- __[路径不对/代理未生效]__：浏览器直接打开接口返回的是 HTML 而非 JSON；请检查前端代理或后端实际监听路径。
+- __[参数不兼容]__：`connId`/`id`/`connectionId`、`db`/`database`/`schema`、`table`/`tableName`/`tbl` 未覆盖到后端期望参数时会导致空结果。
+- __[Content-Type 非 JSON]__：部分接口返回 `text/html` 或 `text/plain`，前端会尝试文本解析；如失败，回退 REST 路径。
+- __[数据太大]__：建议分页（`page/pageSize`）或限制列，避免浏览器内存压力。
+- __[权限/网络问题]__：关注 CORS、鉴权中间件、以及目标数据库网络连通性。
+
+---
+
 ## 版本与变更
 - 2025-09-17
   - 初版整理，补全 `/connections`、`/ticket/databases`、`/connections/{id}/databases`、`/ticket/tables`、`/api/ticket/columns`、`/ticket/execute` 等接口说明；
