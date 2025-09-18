@@ -470,49 +470,7 @@ export function useSqlConsole(): UseSqlConsole {
     }
   }
 
-function beautifySQL() {
-  const at = activeTab.value
-  const baseSql = (at?.sql ?? state.sql) || ''
-  if (!baseSql) return
-  let s = baseSql
-  s = s.replace(/[\t ]+/g, ' ').replace(/\s*;\s*/g, ';\n').replace(/\n{3,}/g, '\n\n').trim() + '\n'
-  if (at) at.sql = s
-  state.sql = s
-}
-
-async function loadTables(db: string) {
-  if (!db || !state.selectedConnId) return
-  state.tablesLoading[db] = true
-  try {
-    // 与现有实现兼容的参数名
-    const params: any = { connId: state.selectedConnId, db, database: db, schema: db, id: state.selectedConnId }
-    const { data } = await api.get('/ticket/tables', { params })
-    state.tables[db] = Array.isArray(data) ? data : []
-  } catch (e) {
-    try { console.error('[useSqlConsole] loadTables error', db, e) } catch {}
-    state.tables[db] = state.tables[db] || []
-  } finally {
-    state.tablesLoading[db] = false
-  }
-}
-
-async function loadDatabases() {
-  // 优先尝试 /ticket/databases?connId=xxx
-  try {
-    const { data } = await api.get('/ticket/databases', { params: { connId: state.selectedConnId, id: state.selectedConnId, connectionId: state.selectedConnId } })
-    if (Array.isArray(data) && data.length) {
-      state.databases = data
-      return
-    }
-  } catch {}
-  // 兜底尝试 /connections/{id}/databases
-  try {
-    const { data } = await api.get(`/connections/${state.selectedConnId}/databases`)
-    state.databases = Array.isArray(data) ? data : []
-  } catch (e) {
-    state.databases = []
-  }
-}
+// （移除重复的 beautifySQL/loadTables/loadDatabases 定义）
 
 async function loadConns() {
   try {
@@ -526,12 +484,34 @@ async function loadConns() {
 async function appendTableToSQL(db: string, tbl: string) {
   const snippet = `-- ${db}.${tbl}\nSELECT * FROM ${db}.${tbl} LIMIT 100;`
   const at = activeTab.value
-  const base = (at?.sql ?? state.sql) || ''
+
+  // 基准文本仅取“实时编辑器内容”：优先 CodeMirror 镜像，其次 fallback DOM，绝不使用滞后 state
+  let base = ''
+  try {
+    const cmMirror = (globalThis as any).__tq_sql_text
+    if (typeof cmMirror === 'string') base = cmMirror
+  } catch {}
+  if (!base) {
+    try {
+      const host = (document.querySelector('.tq-sql-console') as HTMLElement | null) || (document.querySelector('.tq-sql') as HTMLElement | null)
+      base = host?.textContent || ''
+    } catch {}
+  }
+
   const prefix = base && !/\n$/.test(base) ? '\n' : ''
-  const next = base + prefix + snippet
+  const next = (base ? (base + prefix) : '') + snippet
+
   if (at) at.sql = next
   state.sql = next
-  // 片段插入后重新确保编辑器就绪并聚焦，防止光标丢失
+
+  // 写回镜像与 fallback 容器，确保下一次插入仍以“最新可见文本”为基准
+  try { (globalThis as any).__tq_sql_text = next } catch {}
+  try {
+    const host = (document.querySelector('.tq-sql-console') as HTMLElement | null) || (document.querySelector('.tq-sql') as HTMLElement | null)
+    if (host) host.textContent = next
+  } catch {}
+
+  // 保持编辑器聚焦
   nextTick(() => ensureSqlEditor())
 }
 

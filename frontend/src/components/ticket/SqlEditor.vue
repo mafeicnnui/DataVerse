@@ -458,6 +458,16 @@ onMounted(async () => {
               } catch {}
             }
           }),
+          // 将编辑器内容实时镜像到全局与 ctx.tq.sql，防止 Ctrl+X 后状态滞后
+          EditorView.updateListener.of((update: any) => {
+            try {
+              if (update.docChanged) {
+                const cur = update.state.doc.toString()
+                ;(globalThis as any).__tq_sql_text = cur
+                if (ctx?.tq) ctx.tq.sql = cur
+              }
+            } catch {}
+          }),
           EditorView.inputHandler.of((view: any, from: number, to: number, text: string) => {
             try {
               if (text === '.') {
@@ -496,6 +506,42 @@ onMounted(async () => {
         }
       } catch {}
       try { console.debug('[sql-console] CM mounted (shadow)') } catch {}
+      // 监听剪切：同步镜像并在清空时清理 fallback DOM
+      try {
+        const onCut = () => {
+          try {
+            const cur = view.state.doc.toString()
+            ;(globalThis as any).__tq_sql_text = cur
+            if (ctx?.tq) ctx.tq.sql = cur
+            if (!cur) {
+              const h = tqCodeRefLocal.value as HTMLElement | null
+              if (h) h.textContent = ''
+            }
+          } catch {}
+        }
+        window.addEventListener('cut', onCut, true)
+        const onKeydown = (ev: KeyboardEvent) => {
+          try {
+            const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+            const mod = isMac ? ev.metaKey : ev.ctrlKey
+            if (mod && (ev.key === 'x' || ev.key === 'X')) {
+              // 下一帧执行，确保浏览器先完成剪切
+              requestAnimationFrame(() => {
+                try {
+                  const cur = view.state.doc.toString()
+                  ;(globalThis as any).__tq_sql_text = cur
+                  if (ctx?.tq) ctx.tq.sql = cur
+                  if (!cur) {
+                    const h = tqCodeRefLocal.value as HTMLElement | null
+                    if (h) h.textContent = ''
+                  }
+                } catch {}
+              })
+            }
+          } catch {}
+        }
+        window.addEventListener('keydown', onKeydown, true)
+      } catch {}
       // 若 shadow 内仍未出现 .cm-editor，则回退
       setTimeout(() => {
         try {
@@ -540,12 +586,6 @@ watch(() => ctx?.tq?.editorHeight, async () => {
   } catch {}
 })
 
-function ensureFallback(host: HTMLElement | null) {
-  try { if (host) { delete (host as any)._dvBound; host.removeAttribute('data-cm'); host.removeAttribute('data-cm-on'); host.removeAttribute('data-cmOn') } } catch {}
-  try { (ctx as any)?.ensureSqlEditor?.(host as any) } catch {}
-  try { cmView.value = null } catch {}
-}
-
 // 外部修改 sql 时，同步到编辑器
 watch(() => ctx?.tq?.sql, (val) => {
   try {
@@ -558,6 +598,33 @@ watch(() => ctx?.tq?.sql, (val) => {
     }
   } catch {}
 })
+
+function ensureFallback(host: HTMLElement | null) {
+  try {
+    if (host) {
+      delete (host as any)._dvBound
+      host.removeAttribute('data-cm')
+      host.removeAttribute('data-cm-on')
+      host.removeAttribute('data-cmOn')
+    }
+  } catch {}
+  try { (ctx as any)?.ensureSqlEditor?.(host as any) } catch {}
+  try { cmView.value = null } catch {}
+  // 将镜像与状态与 fallback DOM 对齐
+  try { (globalThis as any).__tq_sql_text = String(ctx?.tq?.sql || '') } catch {}
+  // fallback: 监听剪切以清空镜像与 DOM
+  try {
+    const onCut = () => {
+      try {
+        ;(globalThis as any).__tq_sql_text = ''
+        if (ctx?.tq) ctx.tq.sql = ''
+        if (host) host.textContent = ''
+      } catch {}
+    }
+    host?.addEventListener('cut', onCut, true)
+    window.addEventListener('cut', onCut, true)
+  } catch {}
+}
 </script>
 
 <style scoped>
