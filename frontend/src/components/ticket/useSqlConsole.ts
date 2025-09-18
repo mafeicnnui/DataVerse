@@ -131,7 +131,7 @@ export function useSqlConsole(): UseSqlConsole {
     totalRows: 0,
     respectInnerLimit: false,
 
-    editorHeight: 220,
+    editorHeight: 162,
     freezeCount: 0,
     freezeLefts: [],
     tableColWidths: [],
@@ -217,7 +217,8 @@ export function useSqlConsole(): UseSqlConsole {
       // 2) 加载数据库列表（与现有实现保持一致：/ticket/databases）
       await loadDatabases()
       // 3) 初始化编辑器高度等（不自动展开任何库，不自动选择数据库）
-      if (!state.editorHeight || state.editorHeight < 100) state.editorHeight = 220
+      // 首帧高度兜底：小于 100 则设为 162
+      if (!state.editorHeight || state.editorHeight < 100) state.editorHeight = 162
       // 4) 初始化默认标签页
       if (!state.qTabs.length) {
         const id = cryptoRandomId()

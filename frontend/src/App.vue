@@ -251,7 +251,7 @@
           <div class="tq-right" ref="tqRightRef">
             <!-- 紧凑型标签栏 -->
             <SqlTabs />
-            <div class="tq-editor-host" :style="{ height: (tq.editorHeight||220) + 'px' }" @click="onSqlHostClick">
+            <div class="tq-editor-host" :style="{ height: Math.max(170, Number(tq.editorHeight||0)) + 'px' }" @click="onSqlHostClick">
               <SqlEditor />
             </div>
             <div class="tq-vsplit" title="拖动调整编辑器与结果高度" @mousedown="startEditorVResize"></div>
@@ -417,7 +417,7 @@
           </button>
           <div class="tq-right" ref="tqRightRef">
             <SqlTabs />
-            <div class="tq-editor-wrap" :style="{ height: (tq.editorHeight || 220) + 'px' }">
+            <div class="tq-editor-wrap" :style="{ height: Math.max(170, Number(tq.editorHeight||0)) + 'px' }">
               <SqlEditor />
             </div>
             <div class="tq-vsplit" @mousedown="startEditorVResize" title="拖动调整编辑器高度"></div>
@@ -578,7 +578,8 @@ async function openConsole(connId) {
     }
   } catch {}
   // 设定编辑器默认高度，支持后续拖拽调整
-  if (!tq.editorHeight || tq.editorHeight < 100) tq.editorHeight = 220
+  // 统一首帧高度为 170：小于 170 则钳制
+  if (!tq.editorHeight || tq.editorHeight < 170) tq.editorHeight = 170
 }
 
 function closeConsole() {
@@ -641,7 +642,7 @@ function startEditorVResize(e) {
     if (!right) return
     const rect = right.getBoundingClientRect()
     const startY = e.clientY
-    const startH = Number(tq.editorHeight || 220)
+    const startH = Math.max(170, Number(tq.editorHeight || 0))
     const minEditor = 120
     const minResult = 140
     const maxEditor = Math.max(minEditor, rect.height - minResult)
@@ -1812,7 +1813,8 @@ Object.assign(tq, {
 if (!('leftCollapsed' in tq)) tq.leftCollapsed = false
 
 // SQL 编辑区默认高度与拖动状态（默认 180 → 130，降低 50px）
-if (!('editorHeight' in tq)) tq.editorHeight = 130
+// 首次注入高度：与独立页一致 170
+if (!('editorHeight' in tq)) tq.editorHeight = 170
 let _resizeState = { dragging: false, startY: 0, startHeight: 0 }
 
 // 强制刷新 CodeMirror 视图布局（在容器高度变化后）
@@ -3170,6 +3172,38 @@ button.test:hover { background:#dcfce7; }
 /* 只保留细线把手，移除粗把手 */
 .ticket-query .tq-vsplit::after { display: none !important; content: none !important; }
 .ticket-query .tq-vsplit::before { content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 40px; height: 2px; background: #cbd5e1; border-radius: 2px; }
+.modal .tq-vsplit::before { box-shadow: none; }
+/* 浮动窗口：隐藏编辑器底边线，避免分隔条上方出现细线 */
+/* 浮动窗口：由外层容器绘制唯一一圈更浅的常驻边框 */
+.modal .tq-editor { border: 1px solid #edf2f7 !important; border-radius: 8px; }
+/* 移除内部 .cm-editor 及其子元素所有边框，避免出现第二圈边框 */
+.modal .tq-editor :deep(.cm-editor) { border: none !important; }
+.modal .tq-editor :deep(.cm-editor:hover),
+.modal .tq-editor :deep(.cm-editor.cm-focused),
+.modal .tq-editor :deep(.cm-editor:focus),
+.modal .tq-editor :deep(.cm-editor:focus-visible),
+.modal .tq-editor :deep(.cm-editor:focus-within) {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+/* 包装容器不再需要单独的下边隐藏 */
+/* 避免内部滚动/内容再叠加第二圈边框 */
+.modal .tq-editor :deep(.cm-scroller),
+.modal .tq-editor :deep(.cm-content) {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+/* 容器不增加悬停边框，边框只由 .cm-editor 控制 */
+.modal .tq-editor-wrap { border: none !important; }
+/* 彻底去掉编辑器获得焦点时的额外描边（可能来自默认主题） */
+.modal .tq-editor :deep(.cm-editor *:focus),
+.modal .tq-editor :deep(.cm-editor *:focus-visible),
+.modal .tq-editor :deep(.cm-editor *:focus-within) {
+  outline: none !important;
+  box-shadow: none !important;
+}
 .ticket-query .tq-vsplit:hover::before { background: #94a3b8; }
 .ticket-query .tq-head-inner { display: inline-block; min-height: 36px; height: 36px; flex: 0 0 auto; }
 .ticket-query .tq-head-inner table { height: 36px; }

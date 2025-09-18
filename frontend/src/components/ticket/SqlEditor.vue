@@ -1,5 +1,5 @@
 <template>
-  <div class="tq-editor" :style="{ '--tq-editor-h': (ctx.tq.editorHeight || 120) + 'px', height: (ctx.tq.editorHeight || 120) + 'px' }" ref="tqEditorRefLocal">
+  <div class="tq-editor" :style="{ '--tq-editor-h': (ctx.tq.editorHeight || 170) + 'px', height: (ctx.tq.editorHeight || 170) + 'px' }" ref="tqEditorRefLocal">
     <!-- 独立容器，仅用于 SQL 控制台；由 ensureSqlEditor 接管为 contenteditable -->
     <div ref="tqCodeRefLocal" class="tq-sql-console" aria-label="SQL 编辑器" title="在此编写 SQL... 支持 Ctrl+Enter 执行"></div>
   </div>
@@ -19,6 +19,8 @@ const ctx = inject<any>('tqCtx')
 const tqEditorRefLocal = ref<HTMLElement | null>(null)
 const tqCodeRefLocal = ref<HTMLElement | null>(null)
 const cmView = ref<any | null>(null)
+// 避免首帧高度监听触发引起的抖动：首帧跳过重排逻辑
+let __firstHeightApplied = false
 
 function getDbList(): string[] {
   try { return Array.isArray(ctx?.tq?.databases) ? ctx.tq.databases as string[] : [] } catch { return [] }
@@ -34,9 +36,8 @@ onMounted(async () => {
   await nextTick()
   const host = tqCodeRefLocal.value as HTMLElement | null
   if (!host) return
-  const sp = new URLSearchParams(location.search)
-  const enableCM = sp.get('cm') === 'on' || (import.meta as any)?.env?.VITE_SQL_CONSOLE_CM === 'on'
-  if (enableCM) {
+  // 始终启用 CodeMirror（原 cm=on 路径），仅在失败时回退
+  {
     try {
       try { console.debug('[sql-console] cm=on detected') } catch {}
       // Shadow DOM 隔离挂载，避免外层被覆盖
@@ -516,11 +517,20 @@ onMounted(async () => {
 
 // 高度变化后触发一次重排，帮助编辑器根据新高度刷新布局
 watch(() => ctx?.tq?.editorHeight, async () => {
+  // 首帧：仅设置高度，不触发 ensure/resize，避免抖动
+  if (!__firstHeightApplied) {
+    try {
+      const el = tqEditorRefLocal.value as HTMLElement | null
+      if (el && ctx?.tq?.editorHeight) el.style.height = `${ctx.tq.editorHeight}px`
+    } catch {}
+    __firstHeightApplied = true
+    return
+  }
   await nextTick()
-  try { await (ctx as any)?.ensureSqlEditor?.(tqCodeRefLocal.value as any) } catch {}
+  // 避免全局 resize，引导编辑器自身重测量
   try {
-    // 通知浏览器做一次重排，兼容性最好
-    window.dispatchEvent(new Event('resize'))
+    const v: any = cmView.value
+    if (v && typeof v.requestMeasure === 'function') v.requestMeasure()
   } catch {}
   try {
     const el = tqEditorRefLocal.value as HTMLElement | null
@@ -554,7 +564,7 @@ watch(() => ctx?.tq?.sql, (val) => {
 /* 下沉自 App.vue 的编辑器容器样式，确保在子组件内生效 */
 /* 容器宽度拉满且不以 flex-basis 影响宽度（避免在父级 row-flex 下变成宽度=高度） */
 /* 让 SQL 容器与 CodeMirror 占满高度（避免父组件 scoped 样式失效） */
-.tq-editor { height: var(--tq-editor-h, 120px); min-height: 120px; box-sizing: border-box; }
+.tq-editor { height: var(--tq-editor-h, 170px); min-height: 170px; box-sizing: border-box; }
 /* SQL 控制台专用容器（fallback 模式下确保换行与可选中） */
 .tq-sql-console { width: 100%; height: 100%; box-sizing: border-box; padding: 8px; outline: none; border: none; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; user-select: text; }
 /* 当启用 cm=on 时，确保 CodeMirror 可见且可聚焦 */

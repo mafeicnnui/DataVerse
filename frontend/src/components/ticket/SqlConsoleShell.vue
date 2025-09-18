@@ -123,25 +123,32 @@
           <span class="chev">{{ state.leftCollapsed ? '›' : '‹' }}</span>
         </button>
         <div class="tq-right col-span-10" ref="rightRef">
-          <!-- 紧凑型标签栏 -->
-          <SqlTabs />
+          <!-- 紧凑型标签栏（固定首帧高度，避免字体/图标加载导致跳动） -->
+          <div class="tq-tabs-wrap">
+            <SqlTabs />
+          </div>
           <!-- 编辑器区域 -->
-          <div class="tq-editor-wrap" :style="{ height: (state.editorHeight || 220) + 'px' }">
+          <div class="tq-editor-wrap" :style="{ height: Math.max(170, Number(state.editorHeight || 0) || 0, 0) + 'px' }">
             <SqlEditor />
         </div>
-        <div class="tq-vsplit" title="拖动调整编辑器高度"></div>
+        <div class="tq-vsplit" title="拖动调整编辑器高度" @mousedown="startResize"></div>
         <!-- 结果区 -->
         <div class="tq-result">
           <div class="tq-result-body">
+            <!-- 执行中状态提示（仅独立页显示，避免影响浮动窗口） -->
+            <div v-if="mode==='page' && state.running" class="tq-executing" aria-live="polite">
+              <span class="spinner" aria-hidden="true"></span>
+              执行中...
+            </div>
             <template v-if="state.result && state.result.type==='table'">
               <div class="tq-result-scroll" ref="tqBodyRef" @scroll="onBodyScroll">
                 <ResultTable />
               </div>
             </template>
-            <template v-else-if="state.result && state.result.type==='text'">
+            <template v-else-if="state.result && state.result.type==='text' && !(state.running && String((state.result as any).text||'').includes('执行中'))">
               <pre class="tq-text">{{ (state.result as any).text }}</pre>
             </template>
-            <template v-else>
+            <template v-else-if="!state.running">
               <div class="muted">在此显示查询结果或执行信息</div>
             </template>
           </div>
@@ -256,6 +263,7 @@ const dbPanelWidth = ref<number>(240)
 // 用于对齐每行文本列宽，让所有行的选中标记/后续图标对齐
 const dbNameColWidth = ref<number>(0)
 
+
 // 切换连接：重置选择并刷新数据库与菜单树
 async function onConnChange(ev: Event) {
   try {
@@ -319,6 +327,11 @@ onMounted(async () => {
   try { if (!state.qTabs || state.qTabs.length === 0) newQueryTab() } catch {}
   // 初始化编辑器（独立页 contenteditable 版本）
   try { await ensureSqlEditor(tqCodeRef.value as any) } catch {}
+  // 初始化编辑器高度为 170px（若未设置或过小），确保分隔条处于编辑器外侧
+  try {
+    const h = Number(state.editorHeight || 0)
+    if (!Number.isFinite(h) || h < 170) (state as any).editorHeight = 170
+  } catch {}
   // 文档点击：点击外部关闭 DB 下拉
   document.addEventListener('mousedown', onDocClickCloseDb, true)
 })
@@ -485,7 +498,35 @@ function computeColWidths() {
   } catch {}
 }
 function adjustHeaderGutter() { /* 占位 */ }
-function startResize() { /* 占位：编辑器高度拖拽在 Shell 外实现 */ }
+function startResize(ev?: MouseEvent) {
+  try {
+    const container = rightRef.value as HTMLElement | null
+    if (!container) return
+    const startY = (ev?.clientY ?? 0)
+    const initH = Number(state.editorHeight || 220)
+    const minH = 170
+    // 与独立页面统一：结果区最小高度 140，避免分隔条侵入编辑器区域
+    const minResult = 140
+    const maxH = Math.max(minH + 80, (container.clientHeight || 600) - minResult)
+    const onMove = (e: MouseEvent) => {
+      try {
+        const dy = e.clientY - startY
+        let h = initH + dy
+        if (!Number.isFinite(h)) h = initH
+        h = Math.max(minH, Math.min(maxH, Math.floor(h)))
+        ;(state as any).editorHeight = h
+      } catch {}
+    }
+    const onUp = () => {
+      try { window.removeEventListener('mousemove', onMove) } catch {}
+      try { window.removeEventListener('mouseup', onUp) } catch {}
+      try { document.body.style.userSelect = '' } catch {}
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp, { once: true })
+    try { document.body.style.userSelect = 'none' } catch {}
+  } catch {}
+}
 async function onSqlHostClick() {
   try {
     await ensureSqlEditor(tqCodeRef.value as any)
@@ -584,20 +625,24 @@ provide('tqCtx', {
 </script>
 
 <style scoped>
-.dv-sql-console { height: 100vh; display: flex; flex-direction: column; }
-.tq-title { flex: 0 0 auto; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #fff; display:flex; align-items:center; gap:8px; }
+.dv-sql-console { height: 100vh; display: flex; flex-direction: column; overflow-anchor: none; }
+.tq-title { flex: 0 0 auto; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #fff; display:flex; align-items:center; gap:8px; height: 60px; box-sizing: border-box; }
 .tq-title .t { font-size: 18px; line-height: 22px; font-weight: 700; color: #1d4ed8; letter-spacing: .2px; }
 .tq-title .i { font-size: 14px; line-height: 20px; color: #6b7280; }
+/* 统一标题栏高度：浮动与独立窗口均为 60px */
+.tq-title { height: 60px; }
 .card.section-block.tq-toolbar { flex: 0 0 auto; }
+.card.section-block.tq-toolbar { height: 48px; box-sizing: border-box; }
+.tq-toolbar-row { height: 100%; align-items: center; }
 /* 顶部与内容之间的留白，贴近工单查询 */
 .tq-main { margin-top: 8px; }
-.tq-main { flex: 1 1 auto; min-height: 0; height: auto; display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: 1fr; gap: 0; padding: 0; background: #f8fafc; position: relative; }
+.tq-main { flex: 1 1 auto; min-height: 0; height: auto; display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: 1fr; gap: 0; padding: 0; background: #f8fafc; position: relative; contain: layout paint; }
 .tq-main.left-collapsed { grid-template-columns: 0 repeat(11, 1fr); }
 /* 左树作为滚动宿主，父容器不滚动 */
-.tq-left { grid-column: 1; background: #f8fafc; border-right: 1px solid #e5e7eb; height: 100%; display: flex; flex-direction: column; overflow: hidden; min-height: 0; position: relative; z-index: 50; pointer-events: auto; box-sizing: border-box; }
+.tq-left { grid-column: 1; background: #f8fafc; border-right: 1px solid #e5e7eb; height: 100%; display: flex; flex-direction: column; overflow: hidden; min-height: 0; position: relative; z-index: 50; pointer-events: auto; box-sizing: border-box; contain: layout paint; }
 .tq-main.left-collapsed .tq-left { display: none !important; border-right: none !important; }
 .tq-main.left-collapsed .tq-right { grid-column: 1 / -1 !important; }
-.tq-tree { padding: 8px; flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin; font-size:14px; }
+.tq-tree { padding: 8px; flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin; font-size:14px; scrollbar-gutter: stable both-edges; overflow-anchor: none; }
 .tq-tree::-webkit-scrollbar { width: 10px; height: 10px; }
 .tq-tree::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; }
 .tq-tree::-webkit-scrollbar-thumb:hover { background: #64748b; }
@@ -608,15 +653,34 @@ provide('tqCtx', {
 .tq-tree-tables li:hover { background:#f2f6ff; }
 .tq-tree-db-name .arrow { display: inline-block; width: 10px; transform: rotate(90deg); transition: transform .15s; color:#64748b; font-size:12px; }
 .tq-right { grid-column: 2; display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; z-index: 10; }
-.tq-editor-wrap { background: #fff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: stretch; justify-content: flex-start; color: #64748b; width: 100%; }
+.tq-right { contain: layout paint; }
+.tq-editor-wrap { background: #fff; border-bottom: none; display: flex; align-items: stretch; justify-content: flex-start; color: #64748b; width: 100%; }
 .tq-editor-wrap > * { width: 100%; max-width: none; }
 .tq-editor-wrap :deep(.tq-sql),
 .tq-editor-wrap :deep(.cm-editor) { width: 100% !important; }
 .tq-editor-placeholder { padding: 24px; font-size: 14px; }
-.tq-result { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.tq-result-body { flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 12px; }
-.tq-result-scroll { width: 100%; height: 100%; overflow-y: auto; overflow-x: hidden; }
+.tq-editor-placeholder { padding: 24px; font-size: 14px; }
+.tq-result { flex: 1; display: flex; flex-direction: column; min-height: 0; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; position: relative; z-index: 1; overflow: hidden; }
+.tq-result-body { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 12px 12px 16px; scrollbar-gutter: stable both-edges; overflow-anchor: none; z-index: 2; background: #fff; }
+.page .tq-result-body { padding-left: 0; padding-right: 0; scrollbar-gutter: auto; }
+/* 独立窗口：去掉结果表格区域的任何左侧内外边距，让表格贴齐左边 */
+.page .tq-result-body .tq-table-fixed,
+.page .tq-result-body .tq-scroll-x,
+.page .tq-result-body .tq-body,
+.page .tq-result-body .tq-body-inner { margin-left: 0 !important; padding-left: 0 !important; }
+/* 浮动窗口：为占位文案与下方横线留足距离，避免视觉压线 */
+.tq-result-body { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 12px 12px 16px; scrollbar-gutter: stable both-edges; overflow-anchor: none; z-index: 2; background: #fff; }
+.tq-result-scroll { width: 100%; height: 100%; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable both-edges; overflow-anchor: none; }
+.page .tq-result-scroll { overflow-x: hidden !important; scrollbar-gutter: auto; }
 .tq-x-scroll { flex: 0 0 auto; height: 14px; overflow-x: auto; overflow-y: hidden; border-top: 1px solid #e5e7eb; background: #fff; }
+.modal .tq-x-scroll { border-top: none; }
+.page .tq-x-scroll { display: block !important; height: 12px; }
+/* 独立窗口：确保内部 .tq-body 的横向滚动条可见，且不被分页遮住 */
+.page :deep(.result-table) .tq-body { overflow-x: auto !important; }
+.page :deep(.result-table) .tq-body { margin-bottom: 6px; }
+/* 独立窗口：隐藏顶部 sticky 横向条，避免两条；与回退前一致 */
+.page :deep(.result-table) .tq-head-inner { order: unset; position: static; top: auto; z-index: auto; }
+.page :deep(.result-table) .tq-scroll-x { display: none !important; position: static; top: auto; z-index: auto; height: 0; }
 .tq-x-scroll .spacer { height: 1px; }
 .tq-pagination { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-top: 1px solid #e5e7eb; background: #fff; color:#374151; }
 .tq-pagination .muted { color: #64748b; }
@@ -644,6 +708,9 @@ provide('tqCtx', {
 .tq-actions.right .icon-btn { width: 32px; height: 32px; }
 .tq-actions.right .icon-btn svg { width: 18px; height: 18px; }
 
+/* 固定标签栏首帧高度与行高，贴合浮动窗口，避免初始装载跳动 */
+.tq-tabs-wrap { height: 36px; display: flex; align-items: center; padding: 0 8px; background: #fff; border-bottom: 1px solid #e5e7eb; box-sizing: border-box; }
+
 /* toolbar spacing utilities per spec */
 .tq-ml10 { margin: 0; margin-left: 10px; }
 .tq-ml20 { margin: 0; margin-left: 20px; }
@@ -662,6 +729,15 @@ provide('tqCtx', {
 :deep(.result-table ::-webkit-scrollbar:horizontal) { height: 0 !important; }
 :deep(.result-table) { scrollbar-gutter: stable both-edges; }
 .muted { color: #9ca3af; }
+.tq-result-body > .muted { display: inline-block; margin-top: 10px; }
+/* 浮动窗口：将占位文案固定在底部上方 24px，彻底避免与边线/横条相交 */
+/* 统一占位样式：与独立页一致（不绝对定位） */
+.tq-result-body > .muted { display: inline-block; margin-top: 10px; }
+
+/* 执行中提示条（不覆盖内容，居中展示） */
+.tq-executing { position: static; display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 13px; line-height: 20px; box-shadow: inset 0 0 0 1px #e5e7eb; margin: 12px auto; }
+.tq-executing .spinner { width: 14px; height: 14px; border: 2px solid #cbd5e1; border-top-color: #60a5fa; border-radius: 50%; animation: tqspin 1s linear infinite; display:inline-block; }
+@keyframes tqspin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
 /* 防止某些浏览器/全局样式把 SVG 放大，统一在本组件内约束 */
 .dv-sql-console svg { width: 18px; height: 18px; display: inline-block; }
@@ -679,7 +755,11 @@ provide('tqCtx', {
 /* 让数据库图标与工单查询保持细线风格 */
 .tq-db .mi svg { fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 /* 连接下拉选择器（与工单一致） */
-.tq-conn-select { color:#0b57d0; font-size:14px; line-height:22px; height:32px; padding:4px 8px; border:1px solid #c7d2fe; border-radius:6px; background:#fff; box-sizing:border-box; width: 100%; }
+.tq-conn-select { color:#0b57d0; font-size:14px; line-height:22px; height:32px; padding:4px 8px; border:1px solid #c7d2fe; border-radius:6px; background:#fff; box-sizing:border-box; width: 100%; outline: none; }
+.tq-conn-select:focus,
+.tq-conn-select:active,
+.tq-conn-select:focus-visible { outline: none; border-color:#3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,.12); border-width:1px; }
+.icon-label:focus-within { outline: none; }
 /* 连接展示：样式对齐工单查询的下拉选择器（但维持只读） */
 .tq-conn-readonly { min-width: 220px; max-width: 36vw; height: 32px; display: inline-flex; align-items: center; padding: 4px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background:#fff; border:1px solid #c7d2fe; border-radius: 6px; box-shadow: none; color:#0b57d0; }
 .tq-db-multi { position: relative; min-width: 240px; }
@@ -712,5 +792,17 @@ provide('tqCtx', {
 .tq-left-toggle:hover { background:#f8fafc; }
 
 /* vertical splitter mimics App.vue */
-.tq-vsplit { height: 8px; cursor: row-resize; background: linear-gradient(to bottom, transparent 0, transparent 3px, #e5e7eb 3px, #e5e7eb 4px, transparent 4px, transparent 100%); }
+.tq-vsplit { position: relative; height: 12px; cursor: row-resize; background: transparent; }
+.tq-vsplit::before { content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 36px; height: 4px; border-radius: 999px; background: #d1d5db; box-shadow: 0 1px 0 rgba(0,0,0,.04); }
+.tq-vsplit:hover { background: transparent; }
+.tq-vsplit:hover::before { background: #c7d2fe; }
+.tq-vsplit:active { background: transparent; }
+.tq-vsplit:active::before { background: #93c5fd; }
+/* 独立窗口（page）与浮动窗口一致：移除分隔条把手的阴影线 */
+.page .tq-vsplit::before { box-shadow: none; }
+/* 独立窗口：分隔条把手更细一点 */
+.page .tq-vsplit::before { height: 2px; }
+/* 独立窗口：查询结果下方的提示文字更小一号 */
+.page .tq-result-body > .muted { font-size: 12px; }
+/* 分隔条样式与独立页一致（无额外偏移） */
 </style>
