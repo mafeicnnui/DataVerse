@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { inject, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { inject, ref, onMounted, onBeforeUnmount, nextTick, onUpdated } from 'vue'
 
 // 从上层注入上下文（tq + 方法 + refs 或回调）
 const ctx = inject<any>('tqCtx')
@@ -78,7 +78,27 @@ onMounted(() => {
   if (ctx.tqBodyTableRef) ctx.tqBodyTableRef.value = tqBodyTableRefLocal.value
   if (ctx.tqScrollXRef) ctx.tqScrollXRef.value = tqScrollXRefLocal.value
   if (ctx.tqBodyRef) ctx.tqBodyRef.value = tqBodyRefLocal.value
-  nextTick(() => { try { ctx.computeColWidths && ctx.computeColWidths(); ctx.adjustHeaderGutter && ctx.adjustHeaderGutter() } catch {} })
+  nextTick(() => {
+    try {
+      ctx.computeColWidths && ctx.computeColWidths()
+      ctx.adjustHeaderGutter && ctx.adjustHeaderGutter()
+    } catch {}
+    // 强制一次横向同步：避免父组件重渲染后 .tq-body 被重置为 0
+    try {
+      const xs = ctx.tqScrollXRef?.value as HTMLElement | null
+      const body = ctx.tqBodyRef?.value as HTMLElement | null
+      if (xs && body && body.scrollLeft !== xs.scrollLeft) body.scrollLeft = xs.scrollLeft
+    } catch {}
+  })
+})
+
+onUpdated(() => {
+  // 子组件更新后再做一次横向同步，覆盖任何由 DOM 更新导致的 scrollLeft 重置
+  try {
+    const xs = (ctx && ctx.tqScrollXRef) ? ctx.tqScrollXRef.value as HTMLElement | null : null
+    const body = (ctx && ctx.tqBodyRef) ? ctx.tqBodyRef.value as HTMLElement | null : null
+    if (xs && body && body.scrollLeft !== xs.scrollLeft) body.scrollLeft = xs.scrollLeft
+  } catch {}
 })
 </script>
 

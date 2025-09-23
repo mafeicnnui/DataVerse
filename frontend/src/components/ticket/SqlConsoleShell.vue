@@ -142,7 +142,7 @@
             </div>
             <template v-if="state.result && state.result.type==='table'">
               <div class="tq-result-scroll" ref="tqBodyRef" @scroll="onBodyScroll">
-                <ResultTable />
+                <ResultTable :key="`${state.page}|${state.pageSize}|${(state.result && state.result.rows && state.result.rows.length) || 0}`" />
               </div>
             </template>
             <template v-else-if="state.result && state.result.type==='text' && !(state.running && String((state.result as any).text||'').includes('执行中'))">
@@ -152,8 +152,12 @@
               <div class="muted">在此显示查询结果或执行信息</div>
             </template>
           </div>
-          <!-- 固定底部横向滚动条，避免需要先把竖向滚动条拉到底才出现 -->
-          <div class="tq-x-scroll" ref="tqScrollXRef" @scroll="onXScroll" v-show="state.result && state.result.type==='table'"><div class="spacer" :style="{ width: (state.bodyTableWidth || 1200) + 'px', height: '1px' }"></div></div>
+          <!-- 固定底部横向滚动条（自定义轨道+拇指），仅作为 UI 控件，不使用原生横滚 -->
+          <div class="tq-x-scroll" ref="tqScrollXRef" v-show="state.result && state.result.type==='table'">
+            <div class="x-track" ref="tqXTrackRef" @pointerdown="onXTrackPointer" @wheel.prevent="onXBarWheel">
+              <div class="x-thumb" ref="tqXThumbRef" @pointerdown.stop="onXThumbPointer" :style="{ width: thumb.w + 'px', transform: 'translateX(' + thumb.l + 'px)' }"></div>
+            </div>
+          </div>
           <!-- 分页条：固定在结果区底部，始终可见 -->
           <div class="tq-pagination" v-if="state.result && state.result.type==='table'">
             <button class="icon-btn" :disabled="state.page<=1" @click="goToPage(state.page-1)" title="上一页">
@@ -181,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, watch, computed, provide, nextTick } from 'vue'
+import { onMounted, onBeforeUnmount, ref, watch, computed, provide, nextTick, reactive } from 'vue'
 import { useSqlConsole } from './useSqlConsole'
 import ResultTable from './ResultTable.vue'
 import SqlTabs from './SqlTabs.vue'
@@ -334,16 +338,56 @@ onMounted(async () => {
   } catch {}
   // 文档点击：点击外部关闭 DB 下拉
   document.addEventListener('mousedown', onDocClickCloseDb, true)
+  // 初始渲染后：计算列宽并做一次横向联动
+  await nextTick()
+  try { computeColWidths() } catch {}
+  await nextTick(); onXScroll(); adjustHeaderGutter(); updateThumbFromBody()
+  attachBodyScrollListener()
+  startXSync()
+  try { window.addEventListener('resize', adjustHeaderGutter, { passive: true }) } catch {}
+  // 强制关闭页面级横向滚动条
+  try { document.documentElement.style.overflowX = 'hidden'; document.body.style.overflowX = 'hidden' } catch {}
 })
 
-watch(() => state.page, (p) => {
+watch(() => state.page, async (p) => {
   pageInput.value = (p as unknown as number) || 1
+  // 翻页后重置滚动位置，避免保留上页的 scrollLeft 导致错位或“看不到数据”
+  await nextTick()
+  try {
+    const xs = tqScrollXRef.value as HTMLElement | null
+    const body = getBodyScrollEl()
+    const head = getHeadScrollEl()
+    if (xs) xs.scrollLeft = 0
+    if (body) body.scrollLeft = 0
+    if (head) head.scrollLeft = 0
+  } catch {}
+  // 翻页后计算列宽
+  await nextTick(); try { computeColWidths() } catch {}
+  await nextTick(); onXScroll(); adjustHeaderGutter(); updateThumbFromBody()
+  // 最终以实际 body.scrollWidth 回填 spacer 宽度，避免第二页渲染时横向宿主与底部条不同步
+  await nextTick();
+  try {
+    const body = document.querySelector('.page .tq-table-fixed .tq-body') as HTMLElement | null
+    if (body && body.scrollWidth) (state as any).bodyTableWidth = body.scrollWidth
+    // 清理任何视觉兜底位移
+    try {
+      const inner = document.querySelector('.page .tq-table-fixed .tq-body-inner') as HTMLElement | null
+      const headInner = document.querySelector('.page .tq-table-fixed .tq-scroll-x .tq-head-inner') as HTMLElement | null
+      if (inner) inner.style.transform = ''
+      if (headInner) headInner.style.transform = ''
+    } catch {}
+  } catch {}
+  onXScroll(); updateThumbFromBody(); attachBodyScrollListener()
+  startXSync()
 })
 
 // 结果变化后，计算列宽与容器宽度
 watch(() => state.result, async () => {
   await nextTick()
   try { computeColWidths() } catch {}
+  // 结果变更后，基于底部横条当前位置做一次横向同步
+  await nextTick(); onXScroll(); adjustHeaderGutter(); updateThumbFromBody(); attachBodyScrollListener()
+  startXSync()
 })
 
 // 打开 DB 下拉时：锁定面板宽度为触发器等宽，滚动时不再变化；并计算最长库名列宽以便行内对齐
@@ -394,6 +438,155 @@ const tqHeadTableRef = ref<HTMLElement | null>(null)
 const tqBodyTableRef = ref<HTMLElement | null>(null)
 const tqScrollXRef = ref<HTMLElement | null>(null)
 const tqBodyRef = ref<HTMLElement | null>(null)
+// 自定义底部横条：轨道与拇指
+const tqXTrackRef = ref<HTMLElement | null>(null)
+const tqXThumbRef = ref<HTMLElement | null>(null)
+const thumb = reactive({ w: 24, l: 0 })
+let __thumbDragging = false
+let __thumbStartX = 0
+let __thumbStartSL = 0
+let __bodyScrollEl: HTMLElement | null = null
+
+// 计算表体尺寸与当前位置
+function getBodyDims() {
+  const body = getBodyScrollEl()
+  if (!body) return { sw: 0, cw: 0, sl: 0 }
+  return { sw: body.scrollWidth || 0, cw: body.clientWidth || 0, sl: body.scrollLeft || 0 }
+}
+// 根据表体当前状态，计算拇指宽度与位置
+function updateThumbMetrics() {
+  try {
+    const track = tqXTrackRef.value as HTMLElement | null
+    const { sw, cw, sl } = getBodyDims()
+    if (!track || sw <= 0 || cw <= 0) { thumb.w = 24; thumb.l = 0; return }
+    const ratio = Math.min(1, cw / sw)
+    const trackW = track.clientWidth || 1
+    const minThumb = 24
+    const tw = Math.max(minThumb, Math.floor(trackW * ratio))
+    const maxScroll = Math.max(0, sw - cw)
+    const maxThumbLeft = Math.max(0, trackW - tw)
+    const tl = maxScroll > 0 ? Math.min(maxThumbLeft, Math.floor((sl / maxScroll) * maxThumbLeft)) : 0
+    thumb.w = tw
+    thumb.l = tl
+  } catch {}
+}
+function updateThumbFromBody() { updateThumbMetrics() }
+// 将拇指位置映射为表体 scrollLeft
+function setBodyScrollLeftByThumb(px: number) {
+  try {
+    const track = tqXTrackRef.value as HTMLElement | null
+    const body = getBodyScrollEl()
+    if (!track || !body) return
+    const trackW = track.clientWidth || 1
+    const maxThumbLeft = Math.max(0, trackW - (thumb.w || 0))
+    const clamped = Math.min(maxThumbLeft, Math.max(0, px))
+    const maxScroll = Math.max(0, (body.scrollWidth || 0) - (body.clientWidth || 0))
+    const targetSL = maxThumbLeft > 0 ? Math.round((clamped / maxThumbLeft) * maxScroll) : 0
+    if (body.scrollLeft !== targetSL) body.scrollLeft = targetSL
+    thumb.l = clamped
+  } catch {}
+}
+// 事件：拖拽拇指
+function onXThumbPointer(ev: PointerEvent) {
+  try {
+    const body = getBodyScrollEl()
+    if (!body) return
+    __thumbDragging = true
+    __thumbStartX = ev.clientX
+    __thumbStartSL = body.scrollLeft || 0
+    const el = ev.currentTarget as HTMLElement
+    el.setPointerCapture?.(ev.pointerId)
+    window.addEventListener('pointermove', onXThumbMove, { passive: false })
+    window.addEventListener('pointerup', onXThumbUp, { passive: true, once: true })
+    ev.preventDefault()
+  } catch {}
+}
+function onXThumbMove(ev: PointerEvent) {
+  if (!__thumbDragging) return
+  try {
+    const track = tqXTrackRef.value as HTMLElement | null
+    const body = getBodyScrollEl()
+    if (!track || !body) return
+    const dx = ev.clientX - __thumbStartX
+    const trackW = track.clientWidth || 1
+    const maxThumbLeft = Math.max(0, trackW - (thumb.w || 0))
+    const maxScroll = Math.max(0, body.scrollWidth - body.clientWidth)
+    const startThumb = maxScroll > 0 ? (__thumbStartSL / maxScroll) * maxThumbLeft : 0
+    setBodyScrollLeftByThumb(startThumb + dx)
+    ev.preventDefault()
+  } catch {}
+}
+function onXThumbUp() {
+  __thumbDragging = false
+  try { window.removeEventListener('pointermove', onXThumbMove as any) } catch {}
+}
+// 事件：点击轨道定位
+function onXTrackPointer(ev: PointerEvent) {
+  try {
+    const track = tqXTrackRef.value as HTMLElement | null
+    if (!track) return
+    const rect = track.getBoundingClientRect()
+    const x = ev.clientX - rect.left - (thumb.w || 0) / 2
+    setBodyScrollLeftByThumb(x)
+  } catch {}
+}
+
+// —— rAF 同步兜底：当原生滚动事件异常时，持续以底部横条为源同步表体与表头 ——
+let __xsync_rid = 0
+let __last_xs_sl = -1
+let __x_mismatch_frames = 0
+function xSyncLoop() {
+  try {
+    // 以 .tq-body 为唯一横向滚动宿主与“真源”
+    const body = getBodyScrollEl()
+    if (!body) { __xsync_rid = requestAnimationFrame(xSyncLoop); return }
+    const sl = body.scrollLeft || 0
+    const head = getHeadScrollEl()
+    if (head && head.scrollLeft !== sl) head.scrollLeft = sl
+    // 同步底部自定义拇指
+    updateThumbFromBody()
+    __last_xs_sl = sl
+  } catch {}
+  __xsync_rid = requestAnimationFrame(xSyncLoop)
+}
+function startXSync() {
+  try { cancelAnimationFrame(__xsync_rid) } catch {}
+  __last_xs_sl = -1
+  __xsync_rid = requestAnimationFrame(xSyncLoop)
+}
+function stopXSync() {
+  try { cancelAnimationFrame(__xsync_rid) } catch {}
+  __xsync_rid = 0
+}
+
+function onXWheel(ev: WheelEvent) {
+  try {
+    const xs = tqScrollXRef.value as HTMLElement | null
+    const body = getBodyScrollEl()
+    const head = getHeadScrollEl()
+    if (!xs || !body) return
+    const dx = Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY
+    const max = Math.max(0, body.scrollWidth - body.clientWidth)
+    const target = Math.min(max, Math.max(0, (body.scrollLeft || 0) + dx))
+    if (body.scrollLeft !== target) body.scrollLeft = target
+    if (head && head.scrollLeft !== target) head.scrollLeft = target
+    if (xs.scrollLeft !== target) xs.scrollLeft = target
+    ev.preventDefault()
+    // 同步后立即检查，必要时应用 transform 矫正
+    try {
+      const tableRoot = document.querySelector('.page .tq-table-fixed') as HTMLElement | null
+      const inner = tableRoot?.querySelector('.tq-body-inner') as HTMLElement | null
+      const headInner = tableRoot?.querySelector('.tq-scroll-x .tq-head-inner') as HTMLElement | null
+      if (Math.abs((body.scrollLeft || 0) - target) > 1) {
+        if (inner) inner.style.transform = target ? `translate3d(${-target}px, 0, 0)` : ''
+        if (headInner) headInner.style.transform = target ? `translate3d(${-target}px, 0, 0)` : ''
+      } else {
+        if (inner && inner.style.transform) inner.style.transform = ''
+        if (headInner && headInner.style.transform) headInner.style.transform = ''
+      }
+    } catch {}
+  } catch {}
+}
 
 // 激活标签：走组合式方法，并在切换后同步编辑器内容
 function activateQueryTab(id: string) {
@@ -401,15 +594,11 @@ function activateQueryTab(id: string) {
   nextTick(() => { try { ensureSqlEditor(tqCodeRef.value as any) } catch {} })
 }
 
-// 结果表的简单实现/占位：展示当前页数据
+// 展示后端已分页的数据：后端已按 page/pageSize 返回本页 rows，这里不再二次切片
 function getDisplayedRows() {
   try {
     if (!(state.result && (state.result as any).rows)) return []
-    const rows = (state.result as any).rows || []
-    const p = Number(state.page) || 1
-    const ps = Number(state.pageSize) || 50
-    const start = (p - 1) * ps
-    return rows.slice(start, start + ps)
+    return (state.result as any).rows || []
   } catch { return [] }
 }
 
@@ -433,36 +622,71 @@ function onBodyScroll() {
     const xs = tqScrollXRef.value as HTMLElement | null
     const sl = body?.scrollLeft || 0
     if (head) head.scrollLeft = sl
-    if (xs && xs.scrollLeft !== sl) xs.scrollLeft = sl
+    // 自定义底部条：同步拇指位置
+    updateThumbFromBody()
+  } catch {}
+}
+
+function attachBodyScrollListener() {
+  try {
+    const cur = getBodyScrollEl()
+    if (__bodyScrollEl === cur) return
+    if (__bodyScrollEl) {
+      try { __bodyScrollEl.removeEventListener('scroll', onBodyScroll as any) } catch {}
+    }
+    __bodyScrollEl = cur
+    if (__bodyScrollEl) {
+      __bodyScrollEl.addEventListener('scroll', onBodyScroll as any, { passive: true })
+    }
   } catch {}
 }
 
 function onXScroll() {
+  // 自定义横条不依赖原生 scroll，不做任何处理
+}
+
+// 同步所有候选数据体容器的 scrollLeft，避免只动表头
+function scrollBodies(sl: number) {
   try {
-    const xs = tqScrollXRef.value as HTMLElement | null
-    const body = getBodyScrollEl()
-    const head = getHeadScrollEl()
-    const sl = xs?.scrollLeft || 0
-    if (body && body.scrollLeft !== sl) body.scrollLeft = sl
-    if (head && head.scrollLeft !== sl) head.scrollLeft = sl
+    const tableRoot = (document.querySelector('.page .tq-table-fixed') as HTMLElement | null)
+    const root = (tqBodyRef.value as HTMLElement | null) || tableRoot || document.body
+    if (!root) return
+    // 1) 先覆盖已知候选选择器
+    const sels = ['.tq-body', '.tq-body-inner', '.tq-table-fixed .tq-body']
+    for (const sel of sels) {
+      const list = Array.from((tableRoot || root).querySelectorAll(sel)) as HTMLElement[]
+      for (const el of list) { if (el.scrollLeft !== sl) el.scrollLeft = sl }
+    }
+    // 2) 再遍历所有后代，凡是可横向滚动的节点一并对齐（兜底覆盖重渲染后宿主变化）
+    const all = Array.from((tableRoot || root).querySelectorAll('*')) as HTMLElement[]
+    for (const el of all) {
+      if (!el) continue
+      const sw = el.scrollWidth || 0
+      const cw = el.clientWidth || 0
+      if (sw > cw && el.scrollLeft !== sl) el.scrollLeft = sl
+    }
   } catch {}
 }
 
 function getBodyScrollEl(): HTMLElement | null {
-  // 优先使用子组件回填的 ref，否则在结果区内探测最大可横向滚动的容器作为 body
-  const el = (tqBodyTableRef.value as HTMLElement | null) || (tqBodyRef.value as HTMLElement | null)
-  if (el && el.scrollWidth > el.clientWidth) return el
-  const root = tqBodyRef.value as HTMLElement | null
-  if (!root) return null
-  const candidates = Array.from(root.querySelectorAll('*')) as HTMLElement[]
+  // 正确的横/纵滚动宿主是 .tq-body；优先返回 tqBodyRef，其次在其内部探测
+  const bodyRef = tqBodyRef.value as HTMLElement | null
+  if (bodyRef && (bodyRef.scrollWidth > bodyRef.clientWidth || bodyRef.scrollHeight > bodyRef.clientHeight)) return bodyRef
+  // 兜底：在结果区内探测最大可横向滚动的容器作为 body（但应优先 .tq-body）
+  const direct = document.querySelector('.page .tq-table-fixed .tq-body') as HTMLElement | null
+  if (direct) return direct
+  const root = bodyRef || (tqBodyTableRef.value as HTMLElement | null)
+  if (!root) return bodyRef || null
+  const candidates = [root, ...Array.from(root.querySelectorAll('*')) as HTMLElement[]]
   let best: HTMLElement | null = null
+  let bestOverflow = 0
   for (const c of candidates) {
-    const cs = getComputedStyle(c)
-    if ((cs.overflowX === 'auto' || cs.overflowX === 'scroll') && c.scrollWidth > c.clientWidth) {
-      if (!best || c.clientHeight > best.clientHeight) best = c
-    }
+    const csw = c.scrollWidth || 0
+    const ccw = c.clientWidth || 0
+    const overflow = csw - ccw
+    if (overflow > bestOverflow) { bestOverflow = overflow; best = c }
   }
-  return best
+  return best || bodyRef
 }
 
 function getHeadScrollEl(): HTMLElement | null {
@@ -471,6 +695,9 @@ function getHeadScrollEl(): HTMLElement | null {
   if (el && el.scrollWidth > el.clientWidth) return el
   const root = tqBodyRef.value as HTMLElement | null
   if (!root) return null
+  // 直接查找 sticky 头部容器
+  const hx = document.querySelector('.page .tq-table-fixed .tq-scroll-x') as HTMLElement | null
+  if (hx) return hx
   const candidates = Array.from(root.querySelectorAll('*')) as HTMLElement[]
   let best: HTMLElement | null = null
   for (const c of candidates) {
@@ -480,6 +707,18 @@ function getHeadScrollEl(): HTMLElement | null {
     }
   }
   return best
+}
+
+function syncHorizontal() {
+  try {
+    const xs = tqScrollXRef.value as HTMLElement | null
+    const body = getBodyScrollEl()
+    const head = getHeadScrollEl()
+    const sl = xs?.scrollLeft || 0
+    if (body && body.scrollLeft !== sl) body.scrollLeft = sl
+    if (head && head.scrollLeft !== sl) head.scrollLeft = sl
+    scrollBodies(sl)
+  } catch {}
 }
 function computeColWidths() {
   try {
@@ -497,7 +736,28 @@ function computeColWidths() {
     state.bodyTableWidth = bodyWidth
   } catch {}
 }
-function adjustHeaderGutter() { /* 占位 */ }
+function adjustHeaderGutter() {
+  try {
+    const root = document.querySelector('.page .tq-table-fixed') as HTMLElement | null
+    const body = document.querySelector('.page .tq-table-fixed .tq-body') as HTMLElement | null
+    const head = document.querySelector('.page .tq-table-fixed .tq-scroll-x') as HTMLElement | null
+    if (!root || !body || !head) return
+    // 计算表体竖向滚动条宽度（有滚动条则 >0）
+    const vbar = Math.max(0, (body.offsetWidth || 0) - (body.clientWidth || 0))
+    head.style.setProperty('--tq-vbar', vbar + 'px')
+    // 基于 DPR 的子像素补偿：高 DPI 或缩放下适当放大补偿至 2px
+    const dpr = (window.devicePixelRatio || 1)
+    const comp = dpr >= 1.25 ? 3 : (dpr > 1.1 ? 2 : 1)
+    head.style.setProperty('--tq-comp', comp + 'px')
+    // 临时右移表头 9px 进行对齐测试
+    head.style.setProperty('--tq-head-shift', '9px')
+    // 同步头部可滚区域的 scrollLeft（防止初次渲染出现轻微偏差）
+    const xs = tqScrollXRef.value as HTMLElement | null
+    const sl = xs?.scrollLeft || 0
+    const headEl = getHeadScrollEl()
+    if (headEl && headEl.scrollLeft !== sl) headEl.scrollLeft = sl
+  } catch {}
+}
 function startResize(ev?: MouseEvent) {
   try {
     const container = rightRef.value as HTMLElement | null
@@ -550,6 +810,9 @@ function onDocClickCloseDb(ev: MouseEvent) {
 onBeforeUnmount(() => {
   try { document.removeEventListener('mousedown', onDocClickCloseDb, true) } catch {}
   // 无需事件解绑
+  stopXSync()
+  try { window.removeEventListener('resize', adjustHeaderGutter as any) } catch {}
+  try { document.documentElement.style.overflowX = ''; document.body.style.overflowX = '' } catch {}
 })
 
 function onTreeWheel(ev: WheelEvent) {
@@ -625,7 +888,7 @@ provide('tqCtx', {
 </script>
 
 <style scoped>
-.dv-sql-console { height: 100vh; display: flex; flex-direction: column; overflow-anchor: none; }
+.dv-sql-console { height: 100vh; display: flex; flex-direction: column; overflow-anchor: none; overflow-x: hidden; }
 .tq-title { flex: 0 0 auto; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #fff; display:flex; align-items:center; gap:8px; height: 60px; box-sizing: border-box; }
 .tq-title .t { font-size: 18px; line-height: 22px; font-weight: 700; color: #1d4ed8; letter-spacing: .2px; }
 .tq-title .i { font-size: 14px; line-height: 20px; color: #6b7280; }
@@ -636,6 +899,7 @@ provide('tqCtx', {
 .tq-toolbar-row { height: 100%; align-items: center; }
 /* 顶部与内容之间的留白，贴近工单查询 */
 .tq-main { margin-top: 8px; }
+.tq-main { overflow-x: hidden; }
 .tq-main { flex: 1 1 auto; min-height: 0; height: auto; display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: 1fr; gap: 0; padding: 0; background: #f8fafc; position: relative; contain: layout paint; }
 .tq-main.left-collapsed { grid-template-columns: 0 repeat(11, 1fr); }
 /* 左树作为滚动宿主，父容器不滚动 */
@@ -671,14 +935,35 @@ provide('tqCtx', {
 /* 浮动窗口：为占位文案与下方横线留足距离，避免视觉压线 */
 .tq-result-body { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; padding: 12px 12px 16px; scrollbar-gutter: stable both-edges; overflow-anchor: none; z-index: 2; background: #fff; }
 .tq-result-scroll { width: 100%; height: 100%; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable both-edges; overflow-anchor: none; }
-.page .tq-result-scroll { overflow-x: hidden !important; scrollbar-gutter: auto; }
-.tq-x-scroll { flex: 0 0 auto; height: 14px; overflow-x: auto; overflow-y: hidden; border-top: 1px solid #e5e7eb; background: #fff; }
+/* 独立页：外层不承担读纵向滚动，由表体承担（起点=第1行） */
+.page .tq-result-body { display: flex; flex-direction: column; min-height: 0; }
+.page .tq-result-scroll { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-x: hidden !important; overflow-y: hidden !important; scrollbar-gutter: auto; }
+/* 保持表体仅负责横向滚动（底部外置横条联动） */
+.page :deep(.tq-body) { overflow-x: auto !important; }
+.tq-x-scroll { flex: 0 0 auto; height: 14px; overflow-x: auto; overflow-y: hidden; border-top: 1px solid #e5e7eb; background: #fff; width: 100%; max-width: 100%; }
 .modal .tq-x-scroll { border-top: none; }
-.page .tq-x-scroll { display: block !important; height: 12px; }
-/* 独立窗口：确保内部 .tq-body 的横向滚动条可见，且不被分页遮住 */
-.page :deep(.result-table) .tq-body { overflow-x: auto !important; }
+.page .tq-x-scroll { display: block !important; height: 8px; }
 .page :deep(.result-table) .tq-body { margin-bottom: 6px; }
-/* 独立窗口：隐藏顶部 sticky 横向条，避免两条；与回退前一致 */
+/* 结果表容器使用纵向 Flex，确保表头占自然高度，表体可伸展且可滚动 */
+/* 结果表容器使用纵向 Flex，表体占剩余空间 */
+/* 与浮动窗一致：结果表容器纵向布局，表体承担纵向滚动（注意真实类名为 .tq-table-fixed/.tq-body） */
+.page :deep(.tq-table-fixed) { display: flex; flex-direction: column; min-height: 0; }
+.page :deep(.tq-body) { flex: 1 1 auto; min-height: 0; overflow-y: auto !important; overflow-x: auto !important; }
+/* 统一表体纵向滚动条为 8px（应用于 .tq-body） */
+.page :deep(.tq-body)::-webkit-scrollbar { width: 8px; }
+.page :deep(.tq-body)::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; }
+.page :deep(.tq-body)::-webkit-scrollbar-thumb:hover { background: #64748b; }
+/* 仅隐藏表体的横向滚动条外观（保留横向滚动用于与底部条联动） */
+.page :deep(.tq-body)::-webkit-scrollbar:horizontal { height: 0 !important; }
+/* —— 仅保留底部浅色横向滚动条（page 模式）—— */
+/* 允许内部 body 横向滚动，但隐藏其横向滚动条的可见性，从而由底部浅色条驱动同步 */
+.page :deep(.result-table) .tq-body { overflow-x: auto !important; }
+/* scrollbar-width: none; -ms-overflow-style: none; */
+.page :deep(.tq-body-inner) { overflow-x: visible !important; }
+/* 不再通配隐藏所有滚动条，避免影响纵向；仅在下方针对横向隐藏外观 */
+/* 兜底再隐藏轨道与拇指（横向） */
+.page :deep(.tq-body)::-webkit-scrollbar:horizontal { height: 0 !important; background: transparent !important; }
+.page :deep(.tq-body)::-webkit-scrollbar-thumb:horizontal { background: transparent !important; }
 .page :deep(.result-table) .tq-head-inner { order: unset; position: static; top: auto; z-index: auto; }
 .page :deep(.result-table) .tq-scroll-x { display: none !important; position: static; top: auto; z-index: auto; height: 0; }
 .tq-x-scroll .spacer { height: 1px; }
@@ -687,6 +972,13 @@ provide('tqCtx', {
 /* 左右翻页按钮：与工单查询一致的圆角、尺寸与配色 */
 .tq-pagination .icon-btn { width: 28px; height: 28px; border-radius: 10px; border-color: #e5e7eb; background: #fff; color:#0b57d0; }
 .tq-pagination .icon-btn:hover { background:#f8fafc; }
+/* 自定义底部横条：8px 轨道与拇指（不使用原生横滚） */
+ .tq-x-scroll { flex: 0 0 auto; height: 6px; overflow: hidden; border-top: 1px solid #e5e7eb; background: #fff; position: relative; }
+/* 轨道采用与纵向轨道一致的浅灰背景 */
+.tq-x-scroll .x-track { position: relative; width: 100%; height: 6px; background: #f3f4f6; border-radius: 999px; cursor: pointer; }
+/* 拇指颜色与纵向滚动条保持一致 */
+.tq-x-scroll .x-thumb { position: absolute; left: 0; top: 0; height: 6px; background: #94a3b8; border-radius: 999px; will-change: transform; }
+.tq-x-scroll .x-thumb:hover { background: #64748b; }
 /* 页码输入框：圆角、边框与高度统一 */
 .tq-pagination input[type="number"] { height: 28px; line-height: 28px; border:1px solid #e5e7eb; border-radius: 8px; padding: 2px 8px; box-sizing: border-box; color:#111827; }
 /* 每页下拉：圆角、边框与高度统一 */
@@ -713,8 +1005,20 @@ provide('tqCtx', {
 
 /* toolbar spacing utilities per spec */
 .tq-ml10 { margin: 0; margin-left: 10px; }
+/* —— 最终覆盖（独立页）：仅表体纵向滚动，外层不纵滚，滚动起点=第1行 —— */
+.page .tq-result-scroll { overflow-y: hidden !important; overflow-x: hidden !important; display: flex; flex-direction: column; }
+.page :deep(.tq-table-fixed) { display: flex !important; flex-direction: column !important; flex: 1 1 auto !important; min-height: 0 !important; }
+.page :deep(.tq-table-fixed) .tq-body { flex: 1 1 auto !important; height: 100% !important; min-height: 0 !important; overflow-y: auto !important; overflow-x: auto !important; scrollbar-gutter: stable both-edges; }
+/* 仅隐藏表体横向滚动条外观，不影响纵向 */
+.page :deep(.tq-body)::-webkit-scrollbar:horizontal { height: 0 !important; background: transparent !important; }
+.page :deep(.tq-body)::-webkit-scrollbar-thumb:horizontal { background: transparent !important; }
+.page :deep(.tq-scroll-x) { padding-right: calc(var(--tq-vbar, 0px) + 5px); box-sizing: content-box; }
+.page :deep(.tq-scroll-x .tq-head-inner) { margin-left: var(--tq-head-shift, 0px); }
 .tq-ml20 { margin: 0; margin-left: 20px; }
 .tq-mr10 { margin: 0; margin-right: 10px; }
+
+/* 全局关闭页面级横向滚动条，避免 window 抢占横向交互 */
+:global(html), :global(body) { overflow-x: hidden; }
 
 /* ensure inner controls fill their grid cell */
 .tq-col-2 .icon-label,

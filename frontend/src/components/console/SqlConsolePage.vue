@@ -64,9 +64,9 @@
           </div>
           <div class="result-content">
             <template v-if="result && result.type === 'table'">
-              <div class="table-result">
+              <div class="table-result table-scroll" ref="bodyRef" @scroll="onBodyScroll" style="overflow-x:hidden; overflow-y:auto;">
                 <!-- 这里复用原有的表格组件逻辑 -->
-                <div v-if="result.data && result.data.length > 0">
+                <div v-if="result.data && result.data.length > 0" class="table-inner" :style="{ transform: `translateX(${-xOffset}px)`, minWidth: Math.max(bodyTableWidth, 1200) + 'px' }">
                   <table class="result-table">
                     <thead>
                       <tr>
@@ -89,6 +89,30 @@
               <div class="empty-result">在此显示查询结果或执行信息</div>
             </template>
           </div>
+          <!-- 固定底部横向滚动条，仅在表格结果时显示（浅色） -->
+          <div class="x-scroll" ref="xScrollRef" @scroll="onXScroll" v-show="result && result.type==='table'">
+            <div class="spacer" :style="{ width: Math.max(bodyTableWidth, 1200) + 'px', height: '1px' }"></div>
+          </div>
+          <!-- 分页条：与浮动窗口一致的样式，固定在结果区底部可见 -->
+          <div class="tq-pagination" v-if="result && result.type==='table'">
+            <button class="icon-btn" :disabled="page<=1" @click="goToPage(page-1)" title="上一页">
+              ‹
+            </button>
+            <span class="muted">第</span>
+            <input type="number" v-model.number="pageInput" @keyup.enter="handlePageJump" min="1" :max="totalPages" style="width:70px;height:28px" />
+            <span class="muted">/ {{ totalPages }} 页</span>
+            <button class="icon-btn" :disabled="page>=totalPages" @click="goToPage(page+1)" title="下一页">
+              ›
+            </button>
+            <span class="muted" style="margin-left:12px">每页</span>
+            <select :value="pageSize" @change="handlePageSizeChange($event)" title="每页条数">
+              <option :value="10">10</option>
+              <option :value="20">20</option>
+              <option :value="50">50</option>
+              <option :value="100">100</option>
+            </select>
+            <span class="muted">条，共 {{ totalRows || 0 }} 条</span>
+          </div>
         </div>
       </div>
     </div>
@@ -96,7 +120,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import api from '../../api'
 
 // 从URL参数获取连接ID
@@ -115,6 +139,34 @@ const expandedDb = reactive({})
 const sql = ref('')
 const result = ref(null)
 const running = ref(false)
+
+// 分页相关
+const page = ref(1)
+const pageSize = ref(50)
+const totalRows = ref(0)
+const pageInput = ref(1)
+const totalPages = computed(() => {
+  const t = Number(totalRows.value || 0)
+  const ps = Number(pageSize.value || 1)
+  return Math.max(1, Math.ceil(t / Math.max(1, ps)))
+})
+
+// 固定底部横向滚动条相关
+const bodyRef = ref(null)
+const xScrollRef = ref(null)
+const bodyTableWidth = ref(1200)
+const xOffset = ref(0)
+
+function measureBodyWidth() {
+  try {
+    const body = bodyRef.value
+    if (!body) return
+    // 优先取内部表格真实宽度
+    const table = body.querySelector('table')
+    const w = (table?.scrollWidth) || body.scrollWidth || 1200
+    bodyTableWidth.value = Math.max(600, Math.floor(w))
+  } catch {}
+}
 
 // 编辑器相关
 const editorRef = ref(null)
@@ -186,8 +238,8 @@ async function executeSQL() {
     const { data } = await api.post('/ticket/execute', {
       connId: connId,
       sql: sql.value,
-      page: 1,
-      pageSize: 100
+      page: page.value,
+      pageSize: pageSize.value
     })
     
     if (data && Array.isArray(data.data) && data.columns) {
@@ -197,6 +249,9 @@ async function executeSQL() {
         columns: data.columns,
         total: data.total || data.data.length
       }
+      totalRows.value = Number(data.total || data.data.length || 0)
+      // 同步当前页输入框
+      pageInput.value = page.value
     } else if (typeof data === 'string') {
       result.value = { type: 'text', text: data }
     } else if (data && data.message) {
@@ -210,6 +265,47 @@ async function executeSQL() {
   } finally {
     running.value = false
   }
+  await nextTick()
+  measureBodyWidth()
+}
+
+// 同步内部/底部横向滚动条
+function onBodyScroll() {
+  // 仅处理纵向滚动；横向不再同步（使用 transform 位移）
+}
+
+function onXScroll() {
+  try {
+    const body = bodyRef.value
+    const xs = xScrollRef.value
+    const sl = (xs?.scrollLeft) || 0
+    // 用位移驱动表格的横向移动，彻底避免内部 x 滚动条
+    xOffset.value = sl
+  } catch {}
+}
+
+// 分页交互
+function goToPage(p) {
+  const tp = totalPages.value
+  const n = Math.min(tp, Math.max(1, Number(p) || 1))
+  if (n === page.value) return
+  page.value = n
+  pageInput.value = n
+  executeSQL()
+}
+
+function handlePageJump() {
+  goToPage(pageInput.value)
+}
+
+function handlePageSizeChange(e) {
+  const v = Number(e?.target?.value || pageSize.value)
+  if (!Number.isFinite(v) || v <= 0) return
+  pageSize.value = v
+  // 改变每页条数回到第1页
+  page.value = 1
+  pageInput.value = 1
+  executeSQL()
 }
 
 function stopExecution() {
@@ -281,6 +377,11 @@ async function init() {
 
 onMounted(() => {
   init()
+  try { window.addEventListener('resize', measureBodyWidth) } catch {}
+})
+
+onBeforeUnmount(() => {
+  try { window.removeEventListener('resize', measureBodyWidth) } catch {}
 })
 </script>
 
@@ -290,6 +391,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   font-family: system-ui, -apple-system, sans-serif;
+  overflow-x: hidden; /* 防止页面级别出现横向滚动条 */
 }
 
 .console-header {
@@ -343,7 +445,7 @@ onMounted(() => {
   flex: 1;
   display: grid;
   grid-template-columns: var(--left-width) 1fr;
-  overflow: hidden;
+  overflow: hidden; /* 明确隐藏横向 */
 }
 
 .console-left {
@@ -528,7 +630,7 @@ onMounted(() => {
 }
 
 .result-table {
-  width: 100%;
+  width: max-content; /* 让表格按内容宽度展开，产生水平滚动 */
   border-collapse: collapse;
   font-size: 14px;
 }
@@ -538,6 +640,7 @@ onMounted(() => {
   padding: 8px 12px;
   text-align: left;
   border: 1px solid #e5e7eb;
+  white-space: nowrap; /* 避免换行，确保横向滚动 */
 }
 
 .result-table th {
@@ -549,6 +652,27 @@ onMounted(() => {
 .result-table td {
   color: #111827;
 }
+
+/* 仅保留底部浅色横向滚动条 */
+.sql-console-page { overflow-x: hidden !important; }
+.console-content { overflow-x: hidden !important; }
+.console-right { overflow-x: hidden !important; }
+.query-result { overflow-x: hidden !important; }
+.result-content { overflow-x: hidden !important; }
+.table-scroll { overflow-y: auto; overflow-x: clip !important; -ms-overflow-style: none; scrollbar-width: none; }
+.x-scroll { flex: 0 0 auto; height: 12px; overflow-x: auto; overflow-y: hidden; border-top: 1px solid #e5e7eb; background: #fff; }
+.x-scroll .spacer { height: 1px; }
+/* 隐藏内部横向滚动条（保留纵向） - 作用于 scoped 环境 */
+:deep(.table-scroll)::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; background: transparent !important; }
+:deep(.result-content)::-webkit-scrollbar:horizontal { height: 0 !important; background: transparent !important; }
+/* 进一步弱化横向拇指，防止部分 Chromium 无痕仍渲染 */
+:deep(.table-scroll)::-webkit-scrollbar-thumb:horizontal { background: transparent !important; }
+:deep(.result-content)::-webkit-scrollbar-thumb:horizontal { background: transparent !important; }
+:deep(.table-scroll)::-webkit-scrollbar-corner { background: transparent !important; }
+:deep(.result-content)::-webkit-scrollbar-corner { background: transparent !important; }
+/* Firefox 退化处理：尽量降低内部横向条存在感 */
+.table-scroll { scrollbar-gutter: stable; }
+.table-result { min-width: 100%; }
 
 .text-result {
   font-family: 'Consolas', 'Monaco', monospace;
@@ -564,4 +688,12 @@ onMounted(() => {
   text-align: center;
   padding: 40px;
 }
+
+/* 统一分页样式（与浮动窗口一致） */
+.tq-pagination { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-top: 1px solid #e5e7eb; background: #fff; color:#374151; }
+.tq-pagination .muted { color: #64748b; }
+.tq-pagination .icon-btn { width: 28px; height: 28px; border:1px solid #e5e7eb; border-radius: 10px; background: #fff; color:#0b57d0; cursor: pointer; }
+.tq-pagination .icon-btn:hover { background:#f8fafc; }
+.tq-pagination input[type="number"] { height: 28px; line-height: 28px; border:1px solid #e5e7eb; border-radius: 8px; padding: 2px 8px; box-sizing: border-box; color:#111827; }
+.tq-pagination select { height: 28px; border:1px solid #e5e7eb; border-radius: 8px; padding: 2px 28px 2px 8px; color:#111827; }
 </style>
