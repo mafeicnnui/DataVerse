@@ -3234,11 +3234,17 @@ button.test:hover { background:#dcfce7; }
 .ticket-query .tq-table-tools .btn:hover { background: #f3f4f6; }
 .ticket-query .tq-body { scrollbar-width: auto; }
 .ticket-query .tq-scroll-x { scrollbar-width: auto; }
+.ticket-query .tq-body { scrollbar-width: thin; scrollbar-color: #94a3b8 transparent; }
 .ticket-query .tq-body::-webkit-scrollbar { width: 10px; height: 10px; }
+.ticket-query .tq-body::-webkit-scrollbar:horizontal { height: 0 !important; background: transparent !important; }
 /* 表头隐藏滚动条（避免顶部出现横向滚动条） */
-.ticket-query .tq-scroll-x::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
-.ticket-query .tq-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
-.ticket-query .tq-body::-webkit-scrollbar-track { background: #f1f5f9; }
+.ticket-query .tq-scroll-x { scrollbar-width: none; }
+.ticket-query .tq-scroll-x::-webkit-scrollbar { width: 0 !important; height: 0 !important; background: transparent !important; }
+.ticket-query .tq-scroll-x::-webkit-scrollbar-thumb { background: transparent !important; }
+.ticket-query .tq-body::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; }
+.ticket-query .tq-body::-webkit-scrollbar-thumb:hover { background: #64748b; }
+.ticket-query .tq-body::-webkit-scrollbar-thumb:active { background: #64748b; }
+.ticket-query .tq-body::-webkit-scrollbar-track { background: transparent; }
 .ticket-query .tq-text { margin: 0; white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; }
 .ticket-query .tq-notices { position: absolute; right: 16px; top: 8px; display:flex; flex-direction: column; gap:6px; }
 .ticket-query .tq-notice { background: #0b57d0; color: #fff; padding: 6px 10px; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); font-size: 13px; max-width: 360px; }

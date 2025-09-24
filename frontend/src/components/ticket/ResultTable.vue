@@ -130,10 +130,14 @@ onUpdated(() => {
 .tq-table .col-resizer:hover { background: rgba(59,130,246,0.15); }
 
 /* 滚动条外观（与父级保持一致） */
-.tq-body { scrollbar-width: auto; }
+.tq-body { scrollbar-width: thin; scrollbar-color: #94a3b8 transparent; }
 .tq-body::-webkit-scrollbar { width: 10px; height: 10px; }
-.tq-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
-.tq-body::-webkit-scrollbar-track { background: #f1f5f9; }
-.tq-scroll-x { scrollbar-width: auto; }
-.tq-scroll-x::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
+.tq-body::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; }
+.tq-body::-webkit-scrollbar-thumb:hover { background: #64748b; }
+.tq-body::-webkit-scrollbar-thumb:active { background: #64748b; }
+.tq-body::-webkit-scrollbar-track { background: transparent; }
+/* 隐藏表头横向滚动条，仅用底部自定义横条 */
+.tq-scroll-x { scrollbar-width: none; }
+.tq-scroll-x::-webkit-scrollbar { height: 0 !important; background: transparent !important; }
+.tq-scroll-x::-webkit-scrollbar-thumb { background: transparent !important; }
 </style>

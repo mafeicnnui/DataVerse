@@ -88,6 +88,7 @@ export interface UseSqlConsole {
   viewPlan: () => Promise<void>
   beautifySQL: () => void
   loadTables: (db: string) => Promise<void>
+  loadDatabases: () => Promise<void>
   appendTableToSQL: (db: string, tbl: string) => Promise<void>
 
   // ui helpers
@@ -649,6 +650,7 @@ function closeQueryTab(id: string) {
     viewPlan,
     beautifySQL,
     loadTables,
+    loadDatabases,
     appendTableToSQL,
     newQueryTab,
     closeQueryTab,

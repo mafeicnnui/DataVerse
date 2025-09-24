@@ -29,7 +29,17 @@ html, body, #app { height: 100%; }
   --toggle-width: 24px;
   /* 主内容左侧内边距（靠近侧栏的一侧），可设为 0 以彻底贴边 */
   --content-left-pad: 14px; /* 与右侧一致，保证左右边框视觉对称 */
+  /* 全局字体变量（随 Ctrl/⌘ + 滚轮/键盘缩放） */
+  --dv-font-ui: 14px;
+  --dv-font-mono: 13px;
 }
+
+/* 全局兜底：无痕模式/不同平台下统一菜单树滚动条外观 */
+body .tq-tree { scrollbar-width: thin; scrollbar-color: #94a3b8 transparent; }
+body .tq-tree::-webkit-scrollbar { width: 10px; height: 10px; }
+body .tq-tree::-webkit-scrollbar-track { background: transparent; }
+body .tq-tree::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; }
+body .tq-tree::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
 /* --- 布局容器 --- */
 .app-layout{display:flex; height:100%; background:var(--main-bg); position:relative;} 

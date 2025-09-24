@@ -462,7 +462,7 @@ onMounted(() => {
     cursorBlink: true,
     cursorStyle: 'block',
     fontFamily: 'Menlo, Consolas, monospace',
-    fontSize: 14,
+    fontSize: (window.__dv_font_mono_px || 14),
     lineHeight: 1.2,
     theme: {
       background: '#0b1021',
@@ -492,6 +492,19 @@ onMounted(() => {
   term.loadAddon(fitAddon)
   term.open(termEl.value)
   term.focus()
+  // 监听全局字体缩放
+  try {
+    const onScale = (e) => {
+      try {
+        const mono = (e?.detail?.monoPx) || (window.__dv_font_mono_px) || 14
+        term?.setOption('fontSize', mono)
+        // 调整后重新 fit，避免断行
+        setTimeout(() => { try { doFit() } catch {} }, 0)
+      } catch {}
+    }
+    window.addEventListener('dv-fontscale-change', onScale)
+    wrap.value.__onFontScale = onScale
+  } catch {}
   // 阻止浏览器快捷键（F12/F5/Ctrl+R/Ctrl+Shift+I 等）透传到远端
   try{
     term.attachCustomKeyEventHandler((e)=>{
@@ -594,6 +607,7 @@ onBeforeUnmount(() => {
   try { wrap.value?.__ro?.disconnect() } catch {}
   try { window.removeEventListener('tab-activated', wrap.value?.__onTabActive) } catch {}
   try { window.removeEventListener('keydown', wrap.value?.__onKeyDown) } catch {}
+  try { window.removeEventListener('dv-fontscale-change', wrap.value?.__onFontScale) } catch {}
   try { if (reactBufTimer) { clearTimeout(reactBufTimer); reactBufTimer = null } } catch {}
   try { if (pendingPromptTimer) { clearTimeout(pendingPromptTimer); pendingPromptTimer = null } } catch {}
   try { ws && ws.close() } catch {}

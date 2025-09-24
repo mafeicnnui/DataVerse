@@ -154,7 +154,7 @@
           </div>
           <!-- 固定底部横向滚动条（自定义轨道+拇指），仅作为 UI 控件，不使用原生横滚 -->
           <div class="tq-x-scroll" ref="tqScrollXRef" v-show="state.result && state.result.type==='table'">
-            <div class="x-track" ref="tqXTrackRef" @pointerdown="onXTrackPointer" @wheel.prevent="onXBarWheel">
+            <div class="x-track" ref="tqXTrackRef" @pointerdown="onXTrackPointer" @wheel.prevent="onXWheel">
               <div class="x-thumb" ref="tqXThumbRef" @pointerdown.stop="onXThumbPointer" :style="{ width: thumb.w + 'px', transform: 'translateX(' + thumb.l + 'px)' }"></div>
             </div>
           </div>
@@ -252,7 +252,6 @@ const {
   toggleLeftCollapsed,
   exportCSV,
   exportExcel,
-  loadDatabases,
   loadTables,
   // tabs api from composable
   newQueryTab,
@@ -284,7 +283,8 @@ async function onConnChange(ev: Event) {
     try { state.dbDropdownOpen = false } catch {}
     try { state.databases = [] as any } catch {}
     // 重新加载数据库列表并兜底初始化
-    try { await loadDatabases() } catch {}
+    // 重新加载默认库的表（如已选择库）
+    try { if (state.selectedDb) await loadTables(state.selectedDb) } catch {}
     try { await initConsole(id as any) } catch {}
   } catch {}
 }
@@ -907,9 +907,11 @@ provide('tqCtx', {
 .tq-main.left-collapsed .tq-left { display: none !important; border-right: none !important; }
 .tq-main.left-collapsed .tq-right { grid-column: 1 / -1 !important; }
 .tq-tree { padding: 8px; flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin; font-size:14px; scrollbar-gutter: stable both-edges; overflow-anchor: none; }
+.tq-tree { scrollbar-color: #94a3b8 transparent; }
 .tq-tree::-webkit-scrollbar { width: 10px; height: 10px; }
 .tq-tree::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; }
 .tq-tree::-webkit-scrollbar-thumb:hover { background: #64748b; }
+.tq-tree::-webkit-scrollbar-track { background: transparent; }
 .tq-tree-db-name { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px 10px; border-radius: 6px; line-height: 28px; color:#0b57d0; font-weight: 400; }
 .tq-tree-db-name:hover { background: #eef2ff; }
 .tq-tree-tables { list-style: none; padding-left: 16px; margin: 4px 0 8px; font-size:14px; }
@@ -942,7 +944,7 @@ provide('tqCtx', {
 .page :deep(.tq-body) { overflow-x: auto !important; }
 .tq-x-scroll { flex: 0 0 auto; height: 14px; overflow-x: auto; overflow-y: hidden; border-top: 1px solid #e5e7eb; background: #fff; width: 100%; max-width: 100%; }
 .modal .tq-x-scroll { border-top: none; }
-.page .tq-x-scroll { display: block !important; height: 8px; }
+.page .tq-x-scroll { display: block !important; height: 10px; }
 .page :deep(.result-table) .tq-body { margin-bottom: 6px; }
 /* 结果表容器使用纵向 Flex，确保表头占自然高度，表体可伸展且可滚动 */
 /* 结果表容器使用纵向 Flex，表体占剩余空间 */
@@ -950,9 +952,11 @@ provide('tqCtx', {
 .page :deep(.tq-table-fixed) { display: flex; flex-direction: column; min-height: 0; }
 .page :deep(.tq-body) { flex: 1 1 auto; min-height: 0; overflow-y: auto !important; overflow-x: auto !important; }
 /* 统一表体纵向滚动条为 8px（应用于 .tq-body） */
-.page :deep(.tq-body)::-webkit-scrollbar { width: 8px; }
+.page :deep(.tq-body) { scrollbar-width: thin; }
+.page :deep(.tq-body)::-webkit-scrollbar { width: 10px; height: 10px; }
 .page :deep(.tq-body)::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; }
 .page :deep(.tq-body)::-webkit-scrollbar-thumb:hover { background: #64748b; }
+.page :deep(.tq-body)::-webkit-scrollbar-track { background: transparent; }
 /* 仅隐藏表体的横向滚动条外观（保留横向滚动用于与底部条联动） */
 .page :deep(.tq-body)::-webkit-scrollbar:horizontal { height: 0 !important; }
 /* —— 仅保留底部浅色横向滚动条（page 模式）—— */
@@ -966,19 +970,23 @@ provide('tqCtx', {
 .page :deep(.tq-body)::-webkit-scrollbar-thumb:horizontal { background: transparent !important; }
 .page :deep(.result-table) .tq-head-inner { order: unset; position: static; top: auto; z-index: auto; }
 .page :deep(.result-table) .tq-scroll-x { display: none !important; position: static; top: auto; z-index: auto; height: 0; }
+/* 浮动窗口（modal）同样隐藏表头横向滚动条，避免双横条 */
+.modal :deep(.result-table) .tq-scroll-x { display: none !important; position: static; top: auto; z-index: auto; height: 0; }
 .tq-x-scroll .spacer { height: 1px; }
 .tq-pagination { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-top: 1px solid #e5e7eb; background: #fff; color:#374151; }
 .tq-pagination .muted { color: #64748b; }
 /* 左右翻页按钮：与工单查询一致的圆角、尺寸与配色 */
 .tq-pagination .icon-btn { width: 28px; height: 28px; border-radius: 10px; border-color: #e5e7eb; background: #fff; color:#0b57d0; }
 .tq-pagination .icon-btn:hover { background:#f8fafc; }
-/* 自定义底部横条：8px 轨道与拇指（不使用原生横滚） */
+/* 自定义底部横条：样式对齐左侧菜单滚动条（细拇指、圆角、浅色） */
  .tq-x-scroll { flex: 0 0 auto; height: 6px; overflow: hidden; border-top: 1px solid #e5e7eb; background: #fff; position: relative; }
-/* 轨道采用与纵向轨道一致的浅灰背景 */
-.tq-x-scroll .x-track { position: relative; width: 100%; height: 6px; background: #f3f4f6; border-radius: 999px; cursor: pointer; }
-/* 拇指颜色与纵向滚动条保持一致 */
+/* 轨道与菜单滚动条风格一致：弱化轨道背景 */
+.tq-x-scroll .x-track { position: relative; width: 100%; height: 6px; background: transparent; border-radius: 999px; cursor: pointer; }
+/* 拇指颜色与菜单滚动条保持一致 */
 .tq-x-scroll .x-thumb { position: absolute; left: 0; top: 0; height: 6px; background: #94a3b8; border-radius: 999px; will-change: transform; }
 .tq-x-scroll .x-thumb:hover { background: #64748b; }
+
+/* （回退）不在 modal 统一纵向滚动条，避免影响独立页表现 */
 /* 页码输入框：圆角、边框与高度统一 */
 .tq-pagination input[type="number"] { height: 28px; line-height: 28px; border:1px solid #e5e7eb; border-radius: 8px; padding: 2px 8px; box-sizing: border-box; color:#111827; }
 /* 每页下拉：圆角、边框与高度统一 */
@@ -1109,4 +1117,28 @@ provide('tqCtx', {
 /* 独立窗口：查询结果下方的提示文字更小一号 */
 .page .tq-result-body > .muted { font-size: 12px; }
 /* 分隔条样式与独立页一致（无额外偏移） */
+/* —— 仅内嵌窗口（modal）：统一纵向滚动条为 6px，与菜单一致 —— */
+.modal :deep(.cm-body)::-webkit-scrollbar,
+.modal :deep(.tq-tree)::-webkit-scrollbar,
+.modal :deep(.tq-body)::-webkit-scrollbar { width: 10px; height: 10px; }
+.modal :deep(.tq-body)::-webkit-scrollbar:horizontal { height: 0 !important; background: transparent !important; }
+.modal :deep(.cm-body)::-webkit-scrollbar-thumb,
+.modal :deep(.tq-tree)::-webkit-scrollbar-thumb,
+.modal :deep(.tq-body)::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; }
+.modal :deep(.cm-body)::-webkit-scrollbar-thumb:hover,
+.modal :deep(.tq-tree)::-webkit-scrollbar-thumb:hover,
+.modal :deep(.tq-body)::-webkit-scrollbar-thumb:hover { background: #64748b; }
+/* 仅作用纵向；横向条保持：底部 .tq-x-scroll 自定义 6px，不动 */
+
+/* —— 针对内嵌控制台面板容器（更精确作用域）：.dv-modal-panel.ticket-query —— */
+.dv-modal-panel.ticket-query :deep(.cm-body)::-webkit-scrollbar,
+.dv-modal-panel.ticket-query :deep(.tq-tree)::-webkit-scrollbar,
+.dv-modal-panel.ticket-query :deep(.tq-body)::-webkit-scrollbar { width: 10px; height: 10px; }
+.dv-modal-panel.ticket-query :deep(.cm-body)::-webkit-scrollbar-thumb,
+.dv-modal-panel.ticket-query :deep(.tq-tree)::-webkit-scrollbar-thumb,
+.dv-modal-panel.ticket-query :deep(.tq-body)::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; }
+.dv-modal-panel.ticket-query :deep(.cm-body)::-webkit-scrollbar-thumb:hover,
+.dv-modal-panel.ticket-query :deep(.tq-tree)::-webkit-scrollbar-thumb:hover,
+.dv-modal-panel.ticket-query :deep(.tq-body)::-webkit-scrollbar-thumb:hover { background: #64748b; }
 </style>
+ 

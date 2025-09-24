@@ -599,7 +599,7 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 200px;
   font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 14px;
+  font-size: var(--dv-font-mono, 14px);
   padding: 12px;
   background: #fff;
   border: none;
@@ -632,7 +632,7 @@ onBeforeUnmount(() => {
 .result-table {
   width: max-content; /* 让表格按内容宽度展开，产生水平滚动 */
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: var(--dv-font-ui, 14px);
 }
 
 .result-table th,
@@ -662,6 +662,16 @@ onBeforeUnmount(() => {
 .table-scroll { overflow-y: auto; overflow-x: clip !important; -ms-overflow-style: none; scrollbar-width: none; }
 .x-scroll { flex: 0 0 auto; height: 12px; overflow-x: auto; overflow-y: hidden; border-top: 1px solid #e5e7eb; background: #fff; }
 .x-scroll .spacer { height: 1px; }
+/* 横向滚动条样式对齐左侧菜单（细拇指、圆角、浅灰） */
+.x-scroll { scrollbar-width: thin; scrollbar-color: #94a3b8 transparent; }
+.x-scroll::-webkit-scrollbar { height: 10px; }
+.x-scroll::-webkit-scrollbar-track { background: transparent; }
+.x-scroll::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; }
+.x-scroll:hover::-webkit-scrollbar-thumb { background: #64748b; }
+/* 隐藏表头容器的横向滚动条，避免“双横条”错觉 */
+::deep(.result-table) .tq-scroll-x { scrollbar-width: none; }
+::deep(.result-table) .tq-scroll-x::-webkit-scrollbar { height: 0 !important; background: transparent !important; }
+::deep(.result-table) .tq-scroll-x::-webkit-scrollbar-thumb { background: transparent !important; }
 /* 隐藏内部横向滚动条（保留纵向） - 作用于 scoped 环境 */
 :deep(.table-scroll)::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; background: transparent !important; }
 :deep(.result-content)::-webkit-scrollbar:horizontal { height: 0 !important; background: transparent !important; }
@@ -676,7 +686,7 @@ onBeforeUnmount(() => {
 
 .text-result {
   font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 14px;
+  font-size: var(--dv-font-mono, 14px);
   color: #111827;
   white-space: pre-wrap;
   margin: 0;

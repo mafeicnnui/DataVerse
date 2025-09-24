@@ -50,7 +50,17 @@ onMounted(async () => {
       // 清空 shadow 并注入样式与根节点
       try { while (shadow.firstChild) shadow.removeChild(shadow.firstChild) } catch {}
       const style = document.createElement('style')
-      style.textContent = `:host{display:block;height:100%} .root{height:100%} .root *{box-sizing:border-box}`
+      style.textContent = `
+        :host{display:block;height:100%}
+        .root{height:100%}
+        .root *{box-sizing:border-box}
+        /* 统一 CodeMirror 滚动条样式（Shadow DOM 内部） */
+        .cm-scroller{scrollbar-width: thin;}
+        .cm-scroller::-webkit-scrollbar{width:10px;height:10px}
+        .cm-scroller::-webkit-scrollbar-thumb{background:#94a3b8 !important;border-radius:6px}
+        .cm-scroller::-webkit-scrollbar-thumb:hover{background:#64748b !important}
+        .cm-scroller::-webkit-scrollbar-thumb:active{background:#64748b !important}
+      `
       const root = document.createElement('div')
       root.className = 'root'
       shadow.append(style, root)
@@ -485,7 +495,7 @@ onMounted(async () => {
           EditorView.theme({
             '&': { height: '100%' },
             '.cm-scroller': { overflow: 'auto' },
-            '.cm-content': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: '13px', lineHeight: '1.6' },
+            '.cm-content': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 'var(--dv-font-mono, 13px)', lineHeight: '1.6' },
           }),
         ]
       })
@@ -633,11 +643,21 @@ function ensureFallback(host: HTMLElement | null) {
 /* 让 SQL 容器与 CodeMirror 占满高度（避免父组件 scoped 样式失效） */
 .tq-editor { height: var(--tq-editor-h, 170px); min-height: 170px; box-sizing: border-box; }
 /* SQL 控制台专用容器（fallback 模式下确保换行与可选中） */
-.tq-sql-console { width: 100%; height: 100%; box-sizing: border-box; padding: 8px; outline: none; border: none; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; user-select: text; }
+.tq-sql-console { width: 100%; height: 100%; box-sizing: border-box; padding: 8px; outline: none; border: none; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: var(--dv-font-mono, 13px); line-height: 1.6; white-space: pre-wrap; user-select: text; overflow: auto; scrollbar-width: thin; }
+/* Fallback 内容容器滚动条（与菜单/结果统一） */
+.tq-sql-console::-webkit-scrollbar { width: 10px; height: 10px; }
+.tq-sql-console::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; }
+.tq-sql-console::-webkit-scrollbar-thumb:hover { background: #64748b; }
 /* 当启用 cm=on 时，确保 CodeMirror 可见且可聚焦 */
-.tq-editor :deep(.cm-editor) { width: 100%; height: 100% !important; min-height: 0; box-sizing: border-box; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; line-height: 1.6; }
+.tq-editor :deep(.cm-editor) { width: 100%; height: 100% !important; min-height: 0; box-sizing: border-box; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: var(--dv-font-mono, 13px); line-height: 1.6; }
 .tq-editor :deep(.cm-editor .cm-scroller) { height: 100% !important; overflow: auto !important; }
 .tq-editor :deep(.cm-editor .cm-content) { min-height: 100% !important; white-space: pre-wrap; }
+/* CodeMirror 滚动条统一样式（与菜单/结果一致） */
+.tq-editor :deep(.cm-scroller) { scrollbar-width: thin; }
+.tq-editor :deep(.cm-scroller::-webkit-scrollbar) { width: 10px; height: 10px; }
+.tq-editor :deep(.cm-scroller::-webkit-scrollbar-thumb) { background: #94a3b8 !important; border-radius: 6px; }
+.tq-editor :deep(.cm-scroller::-webkit-scrollbar-thumb:hover) { background: #64748b !important; }
+.tq-editor :deep(.cm-scroller::-webkit-scrollbar-thumb:active) { background: #64748b !important; }
 /* 控制台统一使用 App.vue 的 .tq-vsplit 作为唯一分割条，这里隐藏组件内的 .tq-resizer */
 .tq-resizer { display: none !important; }
 .tq-resizer::before, .tq-resizer::after { display: none !important; content: none !important; }
