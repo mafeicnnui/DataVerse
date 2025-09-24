@@ -310,7 +310,7 @@
     <!-- 控制台模态窗口：复用工单查询能力，固定为指定连接，数据库菜单为该连接下的库 -->
     <div v-if="consoleModal.open" class="dv-modal" role="dialog" aria-modal="true">
       <div class="dv-modal-backdrop" aria-hidden="true"></div>
-      <div class="dv-modal-panel ticket-query" role="document" :style="{ '--left-width': tq.leftCollapsed ? '0px' : '230px' }">
+      <div class="dv-modal-panel ticket-query" role="document">
         <header class="dv-modal-header">
           <h2 class="section-title">控制台 <span class="console-conn-info" v-if="consoleConnInfo">[{{ consoleConnInfo }}]</span></h2>
           <!-- 顶部右侧返回按钮（倒弯箭头） -->
