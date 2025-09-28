@@ -1,4 +1,5 @@
 <template>
+  <!-- 标签栏：复用旧风格（与独立窗口一致） -->
   <div class="tq-tabbar" role="tablist" aria-label="SQL 标签">
     <div
       v-for="(tab, idx) in ctx.tq.qTabs"
@@ -28,7 +29,7 @@ const ctx = inject<any>('tqCtx')
 
 <style>
 /* Tab 样式（从父组件拷贝，保证子组件内可用） */
-.tq-tabbar { display: flex; align-items: center; gap: 6px; padding: 6px 6px 4px; border-bottom: 1px solid #e5e7eb; margin-bottom: 6px; }
+.tq-tabbar { display: flex; align-items: center; gap: 6px; padding: 4px 6px 0; border-bottom: none; margin-bottom: 0; }
 .tq-tabbar .tq-tab { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; padding-right: 26px; background: #f3f4f6; border: 1px solid #e5e7eb; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; color: #0b57d0; font-size: 13px; font-weight: 400; overflow: visible; }
 .tq-tabbar .tq-tab.active { background: #fff; border-color: #c7d2fe; z-index: 2; }
 .tq-tabbar .tq-tab .ico { font-size: 12px; opacity: .8; }

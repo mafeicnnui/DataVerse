@@ -651,7 +651,8 @@ function ensureFallback(host: HTMLElement | null) {
 /* 当启用 cm=on 时，确保 CodeMirror 可见且可聚焦 */
 .tq-editor :deep(.cm-editor) { width: 100%; height: 100% !important; min-height: 0; box-sizing: border-box; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: var(--dv-font-mono, 13px); line-height: 1.6; }
 .tq-editor :deep(.cm-editor .cm-scroller) { height: 100% !important; overflow: auto !important; }
-.tq-editor :deep(.cm-editor .cm-content) { min-height: 100% !important; white-space: pre-wrap; }
+.tq-editor :deep(.cm-editor .cm-content) { min-height: 100% !important; white-space: pre; }
+.tq-editor :deep(.cm-editor .cm-content) { min-height: 100% !important; white-space: pre; }
 /* CodeMirror 滚动条统一样式（与菜单/结果一致） */
 .tq-editor :deep(.cm-scroller) { scrollbar-width: thin; }
 .tq-editor :deep(.cm-scroller::-webkit-scrollbar) { width: 10px; height: 10px; }
