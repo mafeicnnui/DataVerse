@@ -35,13 +35,20 @@
             </div>
             <ul v-show="expandConn[inst.id]" class="dbs">
               <li class="db" v-for="db in filteredDbList(inst.id)" :key="'db-'+inst.id+'-'+db">
-                <div class="db-hd" @click="toggleDb(inst.id, db)" @mouseenter="hoverDb=inst.id+':'+db" @mouseleave="hoverDb=''">
+                <div class="db-hd" @click="toggleDb(inst.id, db)" @mouseenter="hoverDb=inst.id+':'+db" @mouseleave="onDbMouseLeave(inst.id, db)">
                   <span class="arrow" :class="{open: !!expandDbByConn[inst.id]?.[db]}" aria-hidden="true">›</span>
                   <span class="label" :title="db">{{ db }}</span>
-                  <button v-show="hoverDb===inst.id+':'+db" class="mini filter" title="过滤该库的表" @click.stop="openDbFilter(inst.id, db)">🔍</button>
+                  <button
+                    v-show="hoverDb===inst.id+':'+db || !!dbFilterTextByKey[keyOf(inst.id, db)] || dbFilterVisibleKey===keyOf(inst.id, db)"
+                    class="mini filter"
+                    :class="{ active: !!dbFilterTextByKey[keyOf(inst.id, db)] }"
+                    :title="dbFilterTextByKey[keyOf(inst.id, db)] ? '已过滤：' + dbFilterTextByKey[keyOf(inst.id, db)] : '过滤该库的表'"
+                    @click.stop="showDbFilterPopup(inst.id, db, $event)"
+                  >🔍</button>
+                  <input v-if="dbFilterVisibleKey==='__inline__never__'" class="db-filter-input" />
                 </div>
                 <ul v-show="expandDbByConn[inst.id]?.[db]" class="tbls">
-                  <li class="tbl" v-for="t in filteredTablesFor(inst.id, db)" :key="'t-'+inst.id+'-'+db+'-'+t" @click="appendSnip(db, t)">{{ t }}</li>
+                  <li class="tbl" v-for="t in filteredTablesForDisplay(inst.id, db)" :key="'t-'+inst.id+'-'+db+'-'+t" @click="appendSnip(db, t)">{{ t }}</li>
                   <li class="muted" v-if="loadingKey(inst.id, db)">加载中...</li>
                   <li class="muted" v-else-if="emptyKey(inst.id, db)">无表</li>
                 </ul>
@@ -50,12 +57,30 @@
           </div>
         </div>
         <div class="gsearch">
-          <input v-model.trim="globalDbSearch" placeholder="全局库搜索（空格分隔，或关系）" />
+          <div class="searchbox">
+            <span class="ico" aria-hidden="true">🔍</span>
+            <input v-model.trim="globalDbSearch" placeholder="搜索" />
+            <button class="mini action" title="清除所有过滤" @click="clearAllDbFilters">🧹</button>
+            <button class="mini action" title="折叠菜单" @click="collapseAllDbs">📂</button>
+          </div>
         </div>
       </aside>
       <div class="vsplit" @mousedown="startDrag"></div>
       <!-- 右侧：编辑器在上，结果在下（保持与旧页一致的按钮组） -->
       <main class="right" :style="{ '--left-w': leftWidth + 'px' }">
+        <!-- 浮动库表过滤输入框：允许跨出左侧区域显示在右侧 -->
+        <input
+          v-if="dbFilterPopup.show"
+          class="db-filter-float"
+          :style="{ left: dbFilterPopup.left + 'px', top: dbFilterPopup.top + 'px' }"
+          :value="popupInputValue"
+          @input="onPopupInput"
+          @change="onPopupChange"
+          @keydown.enter.prevent="onPopupConfirm"
+          @mouseenter="popupHover = true"
+          @mouseleave="popupHover = false; if(!dbFilterTextByKey[dbFilterPopup.key]) dbFilterPopup.show=false"
+          placeholder="搜索"
+        />
         <div class="tabs">
           <SqlTabs :ctx="tq" />
         </div>
@@ -69,7 +94,7 @@
               <ResultTable />
             </div>
             <pre v-else-if="result && result.type==='text'" class="txt">{{ result.text }}</pre>
-            <div v-else class="info muted">在此显示查询结果或执行信息</div>
+            <div v-else class="info muted placeholder">在此显示查询结果或执行信息</div>
           </div>
           <!-- 底部横向滚动条（与旧页保持一致） -->
           <div class="x-scroll" ref="xScrollRef" @scroll="onXScroll" v-show="result && result.type==='table'">
@@ -129,6 +154,12 @@ const instFilterVisible = ref<string|number>('')
 const globalDbSearch = ref('')
 const hoverInst = ref<string|number>('')
 const hoverDb = ref<string>('')
+// 数据库过滤交互：每个库独立的过滤文本与显示状态
+const dbFilterTextByKey = reactive<Record<string, string>>({})
+const dbFilterVisibleKey = ref<string>('')
+// 浮动输入框定位数据
+const dbFilterPopup = reactive<{ show:boolean; left:number; top:number; key:string }>({ show:false, left:0, top:0, key:'' })
+const popupHover = ref(false)
 const leftWidth = ref(270)
 
 // 右侧
@@ -368,8 +399,95 @@ function openInstFilter(inst:any){ instFilterVisible.value = inst.id; if (!dbsBy
 function isDbSelected(id:any, db:string){ return !!selectedDbByConn[id]?.has(db) }
 function onDbSelect(id:any, db:string, ev:Event){ const on=(ev.target as HTMLInputElement).checked; if(!selectedDbByConn[id]) selectedDbByConn[id]=new Set<string>(); if(on) selectedDbByConn[id].add(db); else selectedDbByConn[id].delete(db) }
 function filteredDbList(id:any){ const all = dbsByConn[id]||[]; const sel=selectedDbByConn[id]; const tokens=(globalDbSearch.value||'').trim().toLowerCase().split(/\s+/).filter(Boolean); return all.filter(db=>{ if(sel&&sel.size>0&&!sel.has(db)) return false; if(!tokens.length) return true; const s=db.toLowerCase(); return tokens.some(t=>s.includes(t)) }) }
-function openDbFilter(id:any, db:string){ const q = prompt('过滤该库的表（空格分隔，或关系）','')||''; const toks=q.trim().toLowerCase().split(/\s+/).filter(Boolean); const key = `${id}::${db}`; const all = tablesByKey[key]||[]; if(!toks.length) return; tablesByKey[key] = all.filter(t=> toks.some(k=> t.toLowerCase().includes(k))) }
+// 保留旧方法名：为了兼容引用，如有调用则改为展示浮层
+function openDbFilter(id:any, db:string){ showDbFilterPopup(id, db) }
+// 改为行内输入：显示输入框并保持图标可见
+function keyOf(id:any, db:string){ return `${id}::${db}` }
+function openDbFilterInline(id:any, db:string){ dbFilterVisibleKey.value = keyOf(id, db) }
+// 打开浮动输入框：根据按钮位置计算坐标，让其可跨出左栏
+function showDbFilterPopup(id:any, db:string, ev?: MouseEvent){
+  const key = keyOf(id, db)
+  dbFilterVisibleKey.value = key
+  try {
+    const btn = ev?.currentTarget as HTMLElement | null
+    if (btn) {
+      const rect = btn.getBoundingClientRect()
+      dbFilterPopup.show = true
+      dbFilterPopup.left = rect.right + 8 // 在按钮右侧 8px
+      dbFilterPopup.top = rect.top - 2
+      dbFilterPopup.key = key
+      popupInputValue.value = dbFilterTextByKey[key] || ''
+      nextTick(() => {
+        const el = document.querySelector('.db-filter-float') as HTMLInputElement | null
+        try { el && el.focus() } catch {}
+      })
+    }
+  } catch {}
+}
+const popupInputValue = ref('')
+function onPopupInput(e: Event){ popupInputValue.value = (e.target as HTMLInputElement).value }
+function onPopupChange(){ dbFilterTextByKey[dbFilterPopup.key] = popupInputValue.value.trim(); if(!dbFilterTextByKey[dbFilterPopup.key]) { dbFilterPopup.show=false; dbFilterVisibleKey.value=''} }
+function onPopupConfirm(){
+  // 提交并展开当前库
+  dbFilterTextByKey[dbFilterPopup.key] = (popupInputValue.value || '').trim()
+  // 解析 key -> id,db
+  try {
+    const [idStr, db] = dbFilterPopup.key.split('::')
+    const id:any = isNaN(Number(idStr)) ? idStr : Number(idStr)
+    if (!expandDbByConn[id]) expandDbByConn[id] = {}
+    expandDbByConn[id][db] = true
+  } catch {}
+  // 关闭浮窗
+  dbFilterPopup.show = false
+}
+function onDbFilterInput(id:any, db:string, e:Event){
+  const key = keyOf(id, db)
+  const txt = String((e.target as HTMLInputElement)?.value || '').trim()
+  dbFilterTextByKey[key] = txt
+  const all = tablesByKey[key] || []
+  if (!txt) { // 恢复原始（若无缓存则保持）
+    // 不改 tablesByKey，本地显示时用 filteredTablesFor 结合文本过滤
+  }
+}
+function onDbMouseLeave(id:any, db:string){
+  const key = keyOf(id, db)
+  hoverDb.value = ''
+  // 若无过滤文本则隐藏输入框和图标（允许鼠标移至浮窗时不立即关闭）
+  if (!dbFilterTextByKey[key]) {
+    dbFilterVisibleKey.value = ''
+    setTimeout(() => {
+      if (!popupHover.value && (!dbFilterPopup.key || !dbFilterTextByKey[dbFilterPopup.key])) {
+        dbFilterPopup.show = false
+      }
+    }, 120)
+  }
+}
 function filteredTablesFor(id:any, db:string){ const key=`${id}::${db}`; return tablesByKey[key]||[] }
+// 增强：若存在过滤文本，则基于缓存结果做一次前端过滤
+function filteredTablesForDisplay(id:any, db:string){
+  const key = keyOf(id, db)
+  const base = tablesByKey[key] || []
+  const txt = (dbFilterTextByKey[key] || '').toLowerCase().trim()
+  if (!txt) return base
+  const tokens = txt.split(/\s+/).filter(Boolean)
+  if (!tokens.length) return base
+  return base.filter(t => tokens.some(k => String(t).toLowerCase().includes(k)))
+}
+function clearAllDbFilters(){
+  // 清除所有库的过滤文本，并隐藏浮窗
+  for (const k of Object.keys(dbFilterTextByKey)) delete dbFilterTextByKey[k]
+  dbFilterPopup.show = false
+  dbFilterVisibleKey.value = ''
+}
+function collapseAllDbs(){
+  // 折叠到实例级：关闭所有实例与其下数据库展开
+  for (const id in expandConn) expandConn[id] = false
+  for (const id in expandDbByConn) {
+    const m = expandDbByConn[id]
+    if (m) for (const db in m) m[db] = false
+  }
+  instFilterVisible.value = ''
+}
 function loadingKey(id:any, db:string){ return !!tablesLoading[`${id}::${db}`] }
 function emptyKey(id:any, db:string){ const key=`${id}::${db}`; const arr=tablesByKey[key]; return Array.isArray(arr) && arr.length===0 }
 
@@ -768,6 +886,9 @@ onUpdated(() => {
 .arrow{ display:inline-block; width:10px; color:#64748b; }
 .arrow.open{ transform:rotate(90deg); }
 .mini{ display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border:1px solid #cbd5e1; border-radius:4px; background:#fff; color:#334155; position:absolute; right:6px; top:4px; }
+.mini.filter.active{ background:#e6f0ff; border-color:#93c5fd; color:#0b57d0; }
+/* 库级过滤输入：与库名同一行，显示在库名右侧，不覆盖库名 */
+.db-filter-input{ position:static; margin-left:6px; height:22px; border:1px solid #cbd5e1; border-radius:4px; padding:0 6px; font-size:12px; min-width:140px; }
 .dbs, .tbls{ list-style:none; margin:0; padding:0 0 0 16px; }
 .tbl{ padding:2px 6px; border-radius:4px; cursor:pointer; }
 .tbl:hover{ background:#f1f5f9; }
@@ -777,11 +898,16 @@ onUpdated(() => {
 .panel .plist{ max-height:220px; overflow:auto; padding:6px 8px; }
 .panel .opt{ display:block; padding:4px 6px; }
 .gsearch{ border-top:1px solid #e5e7eb; padding:8px; flex:0 0 auto; }
-.gsearch input{ width:100%; height:28px; padding:4px 8px; border:1px solid #c7d2fe; border-radius:6px; }
+.gsearch .searchbox{ position: relative; }
+.gsearch .searchbox .ico{ position:absolute; left:8px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:14px; }
+.gsearch .searchbox input{ width:100%; height:28px; padding:4px 64px 4px 28px; border:1px solid #c7d2fe; border-radius:6px; outline:none; }
+.gsearch .searchbox input:focus{ border-color:#c7d2fe; box-shadow:none; }
+.gsearch .searchbox .action{ position:absolute; top:50%; transform:translateY(-50%); right:8px; width:24px; height:24px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; cursor:pointer; margin-left:4px; }
+.gsearch .searchbox .action + .action{ right:36px; }
 .vsplit{ background:transparent; position:relative; cursor:col-resize; }
 .vsplit::before{ content:""; position:absolute; left:2px; top:0; bottom:0; width:2px; background:#e5e7eb; }
 .vsplit:hover::before{ background:#cbd5e1; }
-.right{ position:relative; display:flex; flex-direction:column; min-height:0; min-width:0; z-index: 0; }
+.right{ position:relative; display:flex; flex-direction:column; min-height:0; min-width:0; z-index: 0; background:#f8fafc; }
 .right > .editor-wrap{ margin-top:0; }
 .toolbar{ display:none; }
 .tabs{ margin:6px 12px 0 12px; min-width:0; overflow:hidden; position: sticky; top: 0; z-index: 10000; background: #f8fafc; border-bottom:1px solid #e5e7eb; min-height: 40px; }
@@ -832,9 +958,9 @@ onUpdated(() => {
 .hsplit::before{ content:""; position:absolute; left:0; right:0; top:5px; height:2px; background:#cfd3dc; }
 .fab-actions{ position:absolute; right:12px; top:6px; display:flex; gap:8px; z-index:30; pointer-events:auto; background:#f1f5f9; padding:4px 6px; border-radius:8px; box-shadow:0 6px 16px rgba(15,23,42,0.12); }
 .code{ width:100%; height:100%; padding:10px; border:1px solid #e5e7eb; border-radius:8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:13px; line-height:1.6; outline:none; overflow:auto; white-space: pre-wrap; }
-.result{ display:flex; flex-direction:column; min-height:0; position:relative; z-index:1; }
+.result{ display:flex; flex-direction:column; min-height:0; position:relative; z-index:1; background:#f8fafc; }
 .rhdr{ padding:8px 12px; background:#f8fafc; border-bottom:1px solid #e5e7eb; }
-.rbody{ flex:1 1 auto; min-height:0; overflow:auto; padding:12px; scrollbar-width: thin; scrollbar-color:#94a3b8 transparent; background:#fff; position:relative; }
+.rbody{ flex:1 1 auto; min-height:0; overflow:auto; padding:12px; scrollbar-width: thin; scrollbar-color:#94a3b8 transparent; background:#f8fafc; position:relative; }
 .rbody.table-mode{ padding:0; }
 .rbody.table-mode .table-holder{ height:100%; display:flex; flex-direction:column; }
 .rbody.table-mode :deep(.tq-table-fixed){ flex:1 1 auto; min-height:0; }
@@ -843,7 +969,7 @@ onUpdated(() => {
 .rbody::-webkit-scrollbar-thumb{ background:#94a3b8; border-radius:6px }
 .rbody::-webkit-scrollbar-thumb:hover{ background:#64748b }
 .table-scroll{ overflow-y:auto; overflow-x:clip !important; -ms-overflow-style: none; scrollbar-width: none; }
-.x-scroll{ flex:0 0 auto; height:16px; min-height:16px; overflow-x:auto; overflow-y:hidden; border-top:1px solid #e5e7eb; background:#fafafa; }
+.x-scroll{ flex:0 0 auto; height:16px; min-height:16px; overflow-x:auto; overflow-y:hidden; border-top:1px solid #e5e7eb; background:#f8fafc; }
 .x-scroll{ display: var(--xscroll-visible, block); }
 .x-scroll .spacer{ height:1px; }
 .x-scroll{ scrollbar-width: thin; scrollbar-color:#94a3b8 transparent; }
@@ -857,5 +983,10 @@ onUpdated(() => {
 .tq-pagination .icon-btn:hover{ background:#f8fafc; }
 .tq-pagination input[type="number"]{ height:28px; line-height:28px; border:1px solid #e5e7eb; border-radius:8px; padding:2px 8px; box-sizing:border-box; color:#111827; }
 .tq-pagination select{ height:28px; border:1px solid #e5e7eb; border-radius:8px; padding:2px 28px 2px 8px; color:#111827; }
+/* 结果区占位提示：字体更小、更淡，便于与编辑区区分 */
+.rbody .placeholder{ font-size: 13px; color:#9aa3b2; text-align:center; padding: 36px 8px; }
+/* 浮动库过滤输入框样式 */
+.db-filter-float{ position: fixed; z-index: 12000; height: 28px; padding: 4px 8px; border:1px solid #93c5fd; border-radius:6px; background:#fff; color:#0b57d0; box-shadow:0 8px 24px rgba(0,0,0,.15); width: 220px; outline:none; }
+.db-filter-float:focus{ border-color:#93c5fd; box-shadow:0 0 0 2px rgba(147,197,253,.35); }
 </style>
 
