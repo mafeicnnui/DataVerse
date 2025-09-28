@@ -84,6 +84,14 @@
         <div class="tabs">
           <SqlTabs :ctx="tq" />
         </div>
+        <!-- 关闭标签确认弹窗（与全局风格一致） -->
+        <ConfirmDialog
+          :visible="confirmCloseVisible"
+          text="确定要关闭当前 SQL 标签吗？未保存的内容将丢失。"
+          :meta="{ type:'SQL 标签' }"
+          @confirm="performCloseTab"
+          @cancel="cancelCloseTab"
+        />
         <div class="editor-wrap" ref="editorWrapRef" :style="{ height: editorHeight + 'px', marginTop: '0px' }">
           <div class="editor" ref="editorRef" :style="{ height: editorHeight + 'px' }"></div>
         </div>
@@ -126,6 +134,7 @@ import { ref, reactive, computed, onMounted, onUpdated, onBeforeUnmount, provide
 import api from '../../api'
 import SqlTabs from './SqlTabs.vue'
 import ResultTable from './ResultTable.vue'
+import ConfirmDialog from '../conn/ConfirmDialog.vue'
 // CodeMirror（与旧页一致的依赖）
 import { EditorState } from '@codemirror/state'
 import { EditorView, keymap, highlightActiveLine, lineNumbers } from '@codemirror/view'
@@ -388,7 +397,7 @@ provide('tqCtx', {
   resetTableScroll,
   // 供 SqlTabs 使用（与独立窗口保持一致的方法名）
   newQueryTab: () => newTab(),
-  closeQueryTab: (id: string) => closeTab(id),
+  closeQueryTab: (id: string) => requestCloseTab(id),
   activateQueryTab: (id: string) => switchTab(id)
 })
 
@@ -654,6 +663,9 @@ type Tab = {
 }
 const tabs = reactive<Tab[]>([])
 const activeTab = ref('')
+// 关闭标签确认弹窗状态
+const confirmCloseVisible = ref(false)
+const closingTabId = ref('')
 function newTab(){
   const n = tabs.length + 1
   const t:Tab = { id: String(Date.now()) + '-' + n, title: `SQL ${n}`, text: '', result: null, page: 1, pageSize: 50, totalRows: 0 }
@@ -671,7 +683,17 @@ function newTab(){
   totalRows.value = 0
   refreshEditorLayout(); ensureActionBarVisible(); setTimeout(() => ensureActionBarVisible(), 0)
 }
-function closeTab(id:string){ const idx = tabs.findIndex(t=>t.id===id); if (idx<0) return; const wasActive = tabs[idx].id===activeTab.value; tabs.splice(idx,1); if (!tabs.length) { newTab(); return } if (wasActive) { const next = tabs[Math.max(0, idx-1)]; switchTab(next.id) } }
+function reallyCloseTab(id:string){
+  const idx = tabs.findIndex(t=>t.id===id)
+  if (idx<0) return
+  const wasActive = tabs[idx].id===activeTab.value
+  tabs.splice(idx,1)
+  if (!tabs.length) { newTab(); return }
+  if (wasActive) { const next = tabs[Math.max(0, idx-1)]; switchTab(next.id) }
+}
+function requestCloseTab(id:string){ closingTabId.value = id; confirmCloseVisible.value = true }
+function performCloseTab(){ const id = closingTabId.value; confirmCloseVisible.value = false; if (id) reallyCloseTab(id); closingTabId.value = '' }
+function cancelCloseTab(){ confirmCloseVisible.value = false; closingTabId.value = '' }
 function switchTab(id:string){
   const t = tabs.find(x=>x.id===id)
   if (!t) return
@@ -700,7 +722,7 @@ watchEffect(() => {
 // 兼容 SqlTabs 调用的方法
 ;(tq as any).activateQueryTab = (id:string) => switchTab(id)
 ;(tq as any).newQueryTab = () => newTab()
-;(tq as any).closeQueryTab = (id:string) => closeTab(id)
+;(tq as any).closeQueryTab = (id:string) => requestCloseTab(id)
 
 function exportCSV(){ try{ if(!result.value || result.value.type!=='table') return; const cols = result.value.columns||[]; const rows = result.value.data||[]; const esc=(s:any)=>`"${String(s??'').replace(/"/g,'""')}"`; const lines = [cols.map(esc).join(',')].concat(rows.map((r:any)=> cols.map(c=>esc(r?.[c])).join(','))); const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' }); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='query.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000) } catch{} }
 function exportExcel(){ try{ if(!result.value || result.value.type!=='table') return; const cols = result.value.columns||[]; const rows = result.value.data||[]; const html = `<table>${['<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr>'].concat(rows.map((r:any)=>'<tr>'+cols.map(c=>`<td>${r?.[c]??''}</td>`).join('')+'</tr>')).join('')}</table>`; const blob = new Blob([`\ufeff${html}`], { type: 'application/vnd.ms-excel' }); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='query.xls'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000) } catch{} }
@@ -774,40 +796,57 @@ onMounted(()=>{
       return alias
     }
     const dynamicSQLCompletion = (context: CompletionContext) => {
-      let before = context.matchBefore(/[\w$\.\uFF0E\u3002]+$/)
-      if (!before) {
-        const line = context.state.doc.lineAt(context.pos)
-        const up = line.text.slice(0, context.pos - line.from)
-        let m = up.match(/([\w$]+)[\.\uFF0E\u3002]$/)
-        if (m) {
-          const dbOrTable = m[1]
-          const amap = buildAliasMap(context.state)
-          const hitAlias = amap[dbOrTable.toLowerCase()]
-          if (hitAlias) return fetchColumns(hitAlias.db||currentDb.value||'', hitAlias.table).then(cols=>({ from: context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$.]*$/ })) as any
-          const dbs = buildDbList(); const dbHit = dbs.find(d=> String(d).toLowerCase()===dbOrTable.toLowerCase())
-          if (dbHit) return fetchTables(dbHit).then(list=>({ from: before!.from, options: list.map(t=>({label:t,type:'table'})), validFor:/[\w$.]*$/ })) as any
-          const curDb = currentDb.value
-          if (curDb) return fetchColumns(curDb, dbOrTable).then(cols=>({ from: context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$.]*$/ })) as any
-        }
+      // 读取光标前文本，优先处理以点结尾的三种场景：db.table. / tableAlias. / db.
+      const line = context.state.doc.lineAt(context.pos)
+      const up = line.text.slice(0, context.pos - line.from)
+      const amap = buildAliasMap(context.state)
+      const dbs = buildDbList()
+
+      // 1) db.table. -> 列补全
+      let m3 = up.match(/([`\w]+)\s*\.\s*([`\w]+)\.$/)
+      if (m3) {
+        const db = m3[1].replace(/`/g,'')
+        const table = m3[2].replace(/`/g,'')
+        return fetchColumns(db, table).then(cols=>({ from: context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$]*$/ })) as any
       }
+
+      // 2) alias. 或 表名.（以当前库推断） -> 列补全
+      let m2 = up.match(/([`\w]+)\.$/)
+      if (m2) {
+        const token = m2[1].replace(/`/g,'')
+        const hitAlias = amap[token.toLowerCase()]
+        if (hitAlias) return fetchColumns(hitAlias.db||currentDb.value||'', hitAlias.table).then(cols=>({ from: context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$]*$/ })) as any
+        if (currentDb.value) return fetchColumns(currentDb.value, token).then(cols=>({ from: context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$]*$/ })) as any
+      }
+
+      // 3) db. -> 表补全
+      let m1 = up.match(/([`\w]+)\.$/)
+      if (m1) {
+        const db = m1[1].replace(/`/g,'')
+        const dbHit = dbs.find(d => String(d).toLowerCase() === db.toLowerCase())
+        if (dbHit) return fetchTables(dbHit).then(list=>({ from: context.pos, options: list.map(t=>({label:t,type:'table'})), validFor:/[\w$]*$/ })) as any
+      }
+
+      // 默认：通用词法 + 关键字/库/表列表
+      const before = context.matchBefore(/[\w$\.\uFF0E\u3002]+$/)
       const word = (before?.text||'').trim()
       const items:any[] = []
-      const dbs = buildDbList()
       const parts = word.split('.')
       const pushAll = (arr:string[], type:string)=> arr.forEach(n=> items.push({label:n,type}))
       if (parts.length === 1) { items.push(...keywordList); pushAll(dbs, 'database'); if (currentDb.value) pushAll(tablesByKey[`${connId.value}::${currentDb.value}`]||[], 'table') }
       else if (parts.length === 2) {
         const [dbOrTable, maybeTable] = parts
         const dbHit = dbs.find(d=> String(d).toLowerCase()===dbOrTable.toLowerCase())
-        if (dbHit && !maybeTable) return fetchTables(dbHit).then(list=>({ from: before!.from, options: list.map(t=>({label:t,type:'table'})), validFor:/[\w$.]*$/ })) as any
-        const amap = buildAliasMap(context.state); const hit = amap[dbOrTable.toLowerCase()]
-        if (hit) return fetchColumns(hit.db||currentDb.value||'', hit.table).then(cols=>({ from: before!.from, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$.]*$/ })) as any
-        if (currentDb.value) return fetchColumns(currentDb.value, dbOrTable).then(cols=>({ from: before!.from, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$.]*$/ })) as any
+        if (dbHit && !maybeTable) return fetchTables(dbHit).then(list=>({ from: before ? before.from : context.pos, options: list.map(t=>({label:t,type:'table'})), validFor:/[\w$.]*$/ })) as any
+        const hit = amap[dbOrTable.toLowerCase()]
+        if (hit) return fetchColumns(hit.db||currentDb.value||'', hit.table).then(cols=>({ from: before ? before.from : context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$.]*$/ })) as any
+        if (currentDb.value) return fetchColumns(currentDb.value, dbOrTable).then(cols=>({ from: before ? before.from : context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$.]*$/ })) as any
       } else if (parts.length >= 3) {
         const db = parts[0], table = parts[1]
-        return fetchColumns(db, table).then(cols=>({ from: before!.from, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$.]*$/ })) as any
+        return fetchColumns(db, table).then(cols=>({ from: before ? before.from : context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$.]*$/ })) as any
       }
       if (!items.length) items.push(...keywordList)
+      // 确保在“db.”这种以点结束的情况下也能弹出（上面分支已覆盖，一般不会走到这里）
       return { from: before ? before.from : context.pos, options: items, validFor:/[\w$\.\uFF0E\u3002]*$/ }
     }
 
@@ -824,9 +863,12 @@ onMounted(()=>{
           {
             key: '.',
             run: (view: any) => {
+              // 直接触发补全，不让光标“退格感”错觉：先插入点，再启动补全
               const sel = view.state.selection.main
               view.dispatch({ changes: { from: sel.from, to: sel.to, insert: '.' } })
-              startCompletion(view)
+              try { startCompletion(view) } catch {}
+              // 再次异步触发一次，确保在插入后的新上下文中拉起 db./t./db.table. 的补全
+              try { setTimeout(() => startCompletion(view), 0) } catch {}
               return true
             }
           }
