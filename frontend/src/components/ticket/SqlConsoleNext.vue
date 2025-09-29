@@ -21,13 +21,23 @@
               <span class="label" :title="inst.ip + ':' + inst.port">
                 {{ inst.description || (inst.ip + ':' + inst.port) || ('#' + inst.id) }}
               </span>
-              <button v-show="hoverInst===inst.id" class="mini filter" title="选择实例库" @click.stop="openInstFilter(inst)">⚙</button>
+              <button v-show="hoverInst===inst.id || hasInstFilter(inst.id)" class="mini filter" :class="{ active: hasInstFilter(inst.id) }" title="选择实例库" @click.stop="openInstFilter(inst, $event)">⚙</button>
             </div>
-            <!-- 实例库过滤面板（不遮挡菜单，显示在菜单右侧） -->
-            <div v-if="instFilterVisible===inst.id" class="panel" :style="{ left: (leftWidth + 12) + 'px' }" @mousedown.stop>
-              <div class="phd">选择需要显示的库<button class="x" @click="instFilterVisible=''">×</button></div>
+            <!-- 实例库过滤面板（按钮同水平位置显示，包含搜索框；鼠标移出自动关闭） -->
+            <div
+              v-if="instFilterVisible===inst.id"
+              class="panel inst-panel"
+              :style="{ left: instPanelPos.left + 'px', top: instPanelPos.top + 'px' }"
+              @mousedown.stop
+              @mouseleave="instFilterVisible=''"
+            >
+              <div class="ph-search">
+                <span class="ico" aria-hidden="true">🔍</span>
+                <input v-model.trim="instSearch" placeholder="搜索数据库..." />
+                <button class="clear" :title="'清空所选库'" @click="clearInstSelected(inst.id)">🧹</button>
+              </div>
               <div class="plist">
-                <label class="opt" v-for="db in (dbsByConn[inst.id]||[])" :key="'p-'+inst.id+'-'+db">
+                <label class="opt" v-for="db in (filterInstDbs(inst.id))" :key="'p-'+inst.id+'-'+db">
                   <input type="checkbox" :checked="isDbSelected(inst.id, db)" @change="onDbSelect(inst.id, db, $event)">
                   <span>{{ db }}</span>
                 </label>
@@ -83,6 +93,13 @@
         />
         <div class="tabs">
           <SqlTabs :ctx="tq" />
+          <ConfirmDialog
+            :visible="confirmCloseVisible"
+            :text="'确定要关闭当前 SQL 标签吗？未保存的内容将丢失。'"
+            :meta="{ type: 'SQL 标签', env: connInfo }"
+            @confirm="performCloseTab"
+            @cancel="cancelCloseTab"
+          />
         </div>
         <!-- 关闭确认：Element 优先，必要时回退到自定义弹窗（以防样式/层级异常） -->
         <!-- 回退用的自定义弹窗先移除，确保优先体验 Element 样式 -->
@@ -154,6 +171,9 @@ const tablesByKey = reactive<Record<string, string[]>>({})
 const tablesLoading = reactive<Record<string, boolean>>({})
 const selectedDbByConn = reactive<Record<string|number, Set<string>>>({})
 const instFilterVisible = ref<string|number>('')
+const instPanelPos = reactive<{left:number;top:number}>({ left: 0, top: 0 })
+const instSearch = ref('')
+function hasInstFilter(id:any){ const set = selectedDbByConn[id]; return !!(set && set.size>0) }
 const globalDbSearch = ref('')
 const hoverInst = ref<string|number>('')
 const hoverDb = ref<string>('')
@@ -400,7 +420,35 @@ provide('tqCtx', {
 function toggleConn(id:any){ expandConn[id] = !expandConn[id]; if (expandConn[id] && !dbsByConn[id]) loadDatabasesByConn(id) }
 function toggleDb(id:any, db:string){ if (!expandDbByConn[id]) expandDbByConn[id] = {}; expandDbByConn[id][db] = !expandDbByConn[id][db]; if (expandDbByConn[id][db]) { currentDb.value = db; loadTablesByConnDb(id, db) } }
 
-function openInstFilter(inst:any){ instFilterVisible.value = inst.id; if (!dbsByConn[inst.id]) loadDatabasesByConn(inst.id); if (!selectedDbByConn[inst.id]) selectedDbByConn[inst.id] = new Set<string>() }
+function openInstFilter(inst:any, ev?: MouseEvent){
+  instFilterVisible.value = inst.id
+  if (!dbsByConn[inst.id]) loadDatabasesByConn(inst.id)
+  if (!selectedDbByConn[inst.id]) selectedDbByConn[inst.id] = new Set<string>()
+  try {
+    const btn = ev?.currentTarget as HTMLElement | null
+    if (btn) {
+      const rect = btn.getBoundingClientRect()
+      // 与按钮同水平位置显示（靠近右侧，向下 4px）
+      instPanelPos.left = rect.right + 8
+      instPanelPos.top = rect.top + window.scrollY + 4
+    } else {
+      instPanelPos.left = leftWidth.value + 12
+      instPanelPos.top = 0
+    }
+  } catch {}
+  nextTick(()=>{
+    try {
+      const input = document.querySelector('.inst-panel .ph-search input') as HTMLInputElement | null
+      input && input.focus()
+    } catch {}
+  })
+}
+function filterInstDbs(id:any){
+  const kw = (instSearch.value||'').trim().toLowerCase()
+  const all = dbsByConn[id] || []
+  if (!kw) return all
+  return all.filter((n:string)=> n.toLowerCase().includes(kw))
+}
 function isDbSelected(id:any, db:string){ return !!selectedDbByConn[id]?.has(db) }
 function onDbSelect(id:any, db:string, ev:Event){ const on=(ev.target as HTMLInputElement).checked; if(!selectedDbByConn[id]) selectedDbByConn[id]=new Set<string>(); if(on) selectedDbByConn[id].add(db); else selectedDbByConn[id].delete(db) }
 function filteredDbList(id:any){ const all = dbsByConn[id]||[]; const sel=selectedDbByConn[id]; const tokens=(globalDbSearch.value||'').trim().toLowerCase().split(/\s+/).filter(Boolean); return all.filter(db=>{ if(sel&&sel.size>0&&!sel.has(db)) return false; if(!tokens.length) return true; const s=db.toLowerCase(); return tokens.some(t=>s.includes(t)) }) }
@@ -467,6 +515,7 @@ function onDbMouseLeave(id:any, db:string){
     }, 120)
   }
 }
+function clearInstSelected(id:any){ if (selectedDbByConn[id]) selectedDbByConn[id].clear() }
 function filteredTablesFor(id:any, db:string){ const key=`${id}::${db}`; return tablesByKey[key]||[] }
 // 增强：若存在过滤文本，则基于缓存结果做一次前端过滤
 function filteredTablesForDisplay(id:any, db:string){
@@ -483,6 +532,13 @@ function clearAllDbFilters(){
   for (const k of Object.keys(dbFilterTextByKey)) delete dbFilterTextByKey[k]
   dbFilterPopup.show = false
   dbFilterVisibleKey.value = ''
+  // 同时清除“实例级别的库选择过滤”（全局清理）
+  try {
+    for (const id in selectedDbByConn) {
+      const set = selectedDbByConn[id]
+      if (set && typeof set.clear === 'function') set.clear()
+    }
+  } catch {}
 }
 function collapseAllDbs(){
   // 折叠到实例级：关闭所有实例与其下数据库展开
@@ -957,6 +1013,33 @@ onUpdated(() => {
 .tbl:hover{ background:#f1f5f9; }
 .muted{ color:#9ca3af; padding:6px; }
 .panel{ position:absolute; top:0; z-index:1000; border:1px solid #e5e7eb; border-radius:8px; background:#fff; box-shadow:0 8px 16px rgba(0,0,0,.08); }
+.inst-panel{ position: fixed; width: 320px; max-height: 360px; overflow:auto; }
+.inst-panel .ph-search{ padding:6px 10px; border-bottom:1px solid #e5e7eb; background:#fff; position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; }
+.inst-panel .ph-search{ position: sticky; top:0; position: relative; }
+.inst-panel .ph-search .ico{ position:absolute; left:18px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:14px; pointer-events:none; }
+.inst-panel .ph-search input{ width:100%; height:26px; border:1px solid #c7d2fe; border-radius:6px; padding:2px 34px 2px 32px; font-size:13px; outline:none; }
+.inst-panel .ph-search input:focus{ border-color:#c7d2fe; box-shadow:none; }
+.inst-panel .ph-search .clear{ position:absolute; right:18px; top:50%; transform:translateY(-50%); width:24px; height:24px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; display:inline-flex; align-items:center; justify-content:center; }
 .panel .phd{ display:flex; align-items:center; justify-content:space-between; padding:6px 8px; border-bottom:1px solid #e5e7eb; color:#0b57d0; font-weight:600; }
 .panel .plist{ max-height:220px; overflow:auto; padding:6px 8px; }
 .panel .opt{ display:block; padding:4px 6px; }

@@ -3,8 +3,8 @@
     <div class="modal confirm-modal">
       <div class="modal-header warn">
         <h2 class="with-icon">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M1 21h22L12 2 1 21zm12-3h-2v2h2v-2zm0-8h-2v6h2V10z"/></svg>
-          删除确认
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M1 21h22L12 2 1 21zm12-3h-2v2h2v-2zm0-8h-2v6h2V10z"/></svg>
+          关闭确认
         </h2>
       </div>
       <div class="modal-body">
@@ -45,14 +45,15 @@ const emit = defineEmits(['confirm','cancel'])
 </script>
 
 <style scoped>
-.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center; z-index: 20050; }
-.modal { width: 520px; max-width: 90vw; background: #fff; border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,0.22); overflow: hidden; }
-.modal-header { padding: 12px 16px; border-bottom: 1px solid #eee; }
-.modal-header.warn { background: #fff7f7; }
-.modal-header .with-icon { display:flex; gap:8px; align-items:center; }
-.modal-body { padding: 12px 16px; }
-.actions { margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end; padding: 0 16px 16px; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.25); display:flex; align-items:center; justify-content:center; z-index: 20050; }
+.modal { width: 460px; max-width: 92vw; background: #fff; border-radius: 12px; box-shadow: 0 18px 36px rgba(15,23,42,.22); overflow: hidden; }
+.modal-header { padding: 10px 14px; border-bottom: 1px solid #eee; }
+.modal-header.warn { background: linear-gradient(180deg,#fff8f8,#fff); }
+.modal-header .with-icon { display:flex; gap:8px; align-items:center; font-size: 16px; font-weight: 700; color:#0f172a; margin:0; }
+.modal-header .with-icon svg{ color:#dc2626; }
+.modal-body { padding: 12px 14px; }
+.actions { margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end; padding: 0 14px 14px; }
 /* 按钮样式统一迁移至全局 style.css 的 .icon-btn 系列，这里不再定义，避免 scoped 覆盖全局样式 */
 .confirm-text { font-size: 14px; color: #111; margin: 0 0 4px; }
-.confirm-subtext { font-size: 13px; color: #666; margin: 0; }
+.confirm-subtext { font-size: 12px; color: #6b7280; margin: 0; }
 </style>
