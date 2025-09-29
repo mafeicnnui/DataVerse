@@ -24,6 +24,9 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
+    # 允许通过 IP 访问的前端来源（正则）。例如：http://10.16.45.135:5173
+    # 可通过环境变量 CORS_ORIGIN_REGEX 覆盖
+    CORS_ORIGIN_REGEX: str | None = os.getenv("CORS_ORIGIN_REGEX") or r"^https?://[0-9\.]+(?::[0-9]+)?$"
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

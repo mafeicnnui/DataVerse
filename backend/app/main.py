@@ -16,6 +16,7 @@ app = FastAPI(title="db_expert Backend", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=getattr(settings, "CORS_ORIGIN_REGEX", None),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
