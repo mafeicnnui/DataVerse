@@ -84,14 +84,8 @@
         <div class="tabs">
           <SqlTabs :ctx="tq" />
         </div>
-        <!-- 关闭标签确认弹窗（与全局风格一致） -->
-        <ConfirmDialog
-          :visible="confirmCloseVisible"
-          text="确定要关闭当前 SQL 标签吗？未保存的内容将丢失。"
-          :meta="{ type:'SQL 标签' }"
-          @confirm="performCloseTab"
-          @cancel="cancelCloseTab"
-        />
+        <!-- 关闭确认：Element 优先，必要时回退到自定义弹窗（以防样式/层级异常） -->
+        <!-- 回退用的自定义弹窗先移除，确保优先体验 Element 样式 -->
         <div class="editor-wrap" ref="editorWrapRef" :style="{ height: editorHeight + 'px', marginTop: '0px' }">
           <div class="editor" ref="editorRef" :style="{ height: editorHeight + 'px' }"></div>
         </div>
@@ -273,7 +267,7 @@ function updateSpacerWidth(){
   try {
     const wrap = editorWrapRef.value
     if (wrap) {
-      wrap.style.overflow = 'hidden'
+      wrap.style.overflow = 'visible'
       wrap.style.position = 'relative'
     }
   } catch {}
@@ -282,7 +276,7 @@ function updateSpacerWidth(){
 /**
  * 计算结果表格的每列宽度（带中文注释）
  * - 优先依据第一行数据单元格的实际宽度
- * - 再叠加表头文本的滚动宽度，保证“列标题完整可见”，不被截断
+ * - 再叠加表头文本的滚动宽度，保证"列标题完整可见"，不被截断
  * - 取两者更大值作为该列最终宽度
  */
 function computeColWidths(){
@@ -538,7 +532,7 @@ function appendSnip(db:string, tbl:string){
 }
 /**
  * 执行当前标签页的 SQL
- * - 成功后会把“结果与分页状态”写回到当前标签对象，做到“每个标签互不影响”
+ * - 成功后会把"结果与分页状态"写回到当前标签对象，做到"每个标签互不影响"
  */
 async function exec(){
   const txtGlobal = (globalThis as any).__next_sql_text
@@ -622,7 +616,7 @@ function ensureActionBarVisible(){
     const wrap = editorWrapRef.value
     if (wrap) {
       wrap.style.position = 'relative'
-      wrap.style.overflow = 'hidden'
+      wrap.style.overflow = 'visible'
     }
   } catch {}
 }
@@ -701,6 +695,7 @@ function switchTab(id:string){
   if (cmView) {
     cmView.dispatch({ changes:{ from:0, to: cmView.state.doc.length, insert: t.text||'' } })
     ;(globalThis as any).__next_sql_text = t.text||''
+    try { cmView.focus() } catch {}
   }
   // 恢复该标签自己的结果与分页
   result.value = t.result ?? null
@@ -709,7 +704,7 @@ function switchTab(id:string){
   pageSize.value = Number(t.pageSize || 50)
   totalRows.value = Number(t.totalRows || 0)
   // 刷新表格宽度与滚动
-  refreshEditorLayout(); ensureActionBarVisible(); setTimeout(() => { computeColWidths(); resetTableScroll(); updateSpacerWidth(); ensureActionBarVisible(); }, 0)
+  refreshEditorLayout(); ensureActionBarVisible(); setTimeout(() => { computeColWidths(); resetTableScroll(); updateSpacerWidth(); ensureActionBarVisible(); try{ cmView && cmView.focus() }catch{}; }, 0)
 }
 function updateActiveTabText(txt:string){ const t = tabs.find(x=>x.id===activeTab.value); if (t) { t.text = txt; t.dirty = true } }
 
@@ -796,35 +791,44 @@ onMounted(()=>{
       return alias
     }
     const dynamicSQLCompletion = (context: CompletionContext) => {
-      // 读取光标前文本，优先处理以点结尾的三种场景：db.table. / tableAlias. / db.
-      const line = context.state.doc.lineAt(context.pos)
-      const up = line.text.slice(0, context.pos - line.from)
+      // 使用 matchBefore 精准判断"以点结尾"的场景，稳定触发补全
       const amap = buildAliasMap(context.state)
       const dbs = buildDbList()
 
-      // 1) db.table. -> 列补全
-      let m3 = up.match(/([`\w]+)\s*\.\s*([`\w]+)\.$/)
-      if (m3) {
-        const db = m3[1].replace(/`/g,'')
-        const table = m3[2].replace(/`/g,'')
-        return fetchColumns(db, table).then(cols=>({ from: context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$]*$/ })) as any
+      // db.table.
+      const dbTableDot = context.matchBefore(/[A-Za-z0-9_`]+\.[A-Za-z0-9_`]+\.$/)
+      if (dbTableDot) {
+        const txt = dbTableDot.text
+        try { console.debug('[cm.complete] db.table. hit:', txt) } catch {}
+        const [dbRaw, tableRaw] = txt.slice(0, -1).split('.')
+        const db = dbRaw.replace(/`/g,'')
+        const table = tableRaw.replace(/`/g,'')
+        return fetchColumns(db, table).then(cols=>{
+          try { console.debug('[cm.complete] db.table. columns:', cols) } catch {}
+          // 光标位于最后一个点之后，from 取当前位置，避免把 "db.table." 也纳入过滤前缀
+          return { from: context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$]*$/ }
+        }) as any
       }
-
-      // 2) alias. 或 表名.（以当前库推断） -> 列补全
-      let m2 = up.match(/([`\w]+)\.$/)
-      if (m2) {
-        const token = m2[1].replace(/`/g,'')
+      // alias. 或 表名.
+      const aliasDot = context.matchBefore(/[A-Za-z0-9_`]+\.$/)
+      if (aliasDot) {
+        const token = aliasDot.text.replace('.', '').replace(/`/g,'')
         const hitAlias = amap[token.toLowerCase()]
-        if (hitAlias) return fetchColumns(hitAlias.db||currentDb.value||'', hitAlias.table).then(cols=>({ from: context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$]*$/ })) as any
-        if (currentDb.value) return fetchColumns(currentDb.value, token).then(cols=>({ from: context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$]*$/ })) as any
+        if (hitAlias) return fetchColumns(hitAlias.db||currentDb.value||'', hitAlias.table).then(cols=>{ try { console.debug('[cm.complete] alias columns:', cols) } catch {}; return { from: context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$]*$/ } }) as any
+        if (currentDb.value) {
+          const known = tablesByKey[`${connId.value}::${currentDb.value}`] || []
+          if (known.includes(token)) {
+            return fetchColumns(currentDb.value, token).then(cols=>{ try { console.debug('[cm.complete] table columns:', cols) } catch {}; return { from: context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$]*$/ } }) as any
+          }
+        }
+        // 若是库. 则在下个分支处理
       }
-
-      // 3) db. -> 表补全
-      let m1 = up.match(/([`\w]+)\.$/)
-      if (m1) {
-        const db = m1[1].replace(/`/g,'')
-        const dbHit = dbs.find(d => String(d).toLowerCase() === db.toLowerCase())
-        if (dbHit) return fetchTables(dbHit).then(list=>({ from: context.pos, options: list.map(t=>({label:t,type:'table'})), validFor:/[\w$]*$/ })) as any
+      // db. → 表补全（即使本地列表未加载到该库名，也尝试请求）
+      const dbDot = context.matchBefore(/[A-Za-z0-9_`]+\.$/)
+      if (dbDot) {
+        const dbName = dbDot.text.replace('.', '').replace(/`/g,'')
+        try { console.debug('[cm.complete] db. hit:', dbName) } catch {}
+        return fetchTables(dbName).then(list=>{ try { console.debug('[cm.complete] db. tables:', list) } catch {}; return { from: context.pos, options: (list||[]).map(t=>({label:t,type:'table'})), validFor:/[\w$]*$/ } }) as any
       }
 
       // 默认：通用词法 + 关键字/库/表列表
@@ -846,7 +850,8 @@ onMounted(()=>{
         return fetchColumns(db, table).then(cols=>({ from: before ? before.from : context.pos, options: cols.map(c=>({label:c,type:'property'})), validFor:/[\w$.]*$/ })) as any
       }
       if (!items.length) items.push(...keywordList)
-      // 确保在“db.”这种以点结束的情况下也能弹出（上面分支已覆盖，一般不会走到这里）
+      try { console.debug('[cm.complete] default items:', items.slice(0,5)) } catch {}
+      // 保持 CodeMirror 自身面板为主，不在此处弹自绘列表
       return { from: before ? before.from : context.pos, options: items, validFor:/[\w$\.\uFF0E\u3002]*$/ }
     }
 
@@ -859,22 +864,25 @@ onMounted(()=>{
         syntaxHighlighting(defaultHighlightStyle),
         keymap.of([
           ...completionKeymap,
-          { key: 'Ctrl-Space', run: startCompletion },
-          {
-            key: '.',
-            run: (view: any) => {
-              // 直接触发补全，不让光标“退格感”错觉：先插入点，再启动补全
-              const sel = view.state.selection.main
-              view.dispatch({ changes: { from: sel.from, to: sel.to, insert: '.' } })
-              try { startCompletion(view) } catch {}
-              // 再次异步触发一次，确保在插入后的新上下文中拉起 db./t./db.table. 的补全
-              try { setTimeout(() => startCompletion(view), 0) } catch {}
-              return true
-            }
-          }
+          { key: 'Ctrl-Space', run: startCompletion }
         ]),
         autocompletion({ override:[dynamicSQLCompletion], icons:false, defaultKeymap:true, activateOnTyping:true }),
-        EditorView.updateListener.of((v:any)=>{ if (v.docChanged) { try { const txt = v.state.doc.toString(); (globalThis as any).__next_sql_text = txt; updateActiveTabText(txt) } catch {} } syncEditorScrollerOverflow() }),
+        EditorView.updateListener.of((v:any)=>{
+          if (v.docChanged) {
+            try {
+              const txt = v.state.doc.toString();
+              (globalThis as any).__next_sql_text = txt;
+              updateActiveTabText(txt)
+            } catch {}
+            // 在输入 '.' 后，主动触发一次补全（db. / t. / db.table.）
+            try {
+              const head = v.state.selection.main.head
+              const prev = v.state.doc.sliceString(Math.max(0, head - 1), head)
+              if (prev === '.') startCompletion(v.view)
+            } catch {}
+          }
+          syncEditorScrollerOverflow()
+        }),
         EditorView.theme({
           '&':{ height:'100%' },
           '.cm-scroller':{ overflow:'auto' },
@@ -982,7 +990,7 @@ onUpdated(() => {
 .toolbar .tab.active, .tabs .tab.active{ background:#fff; border-color:#99b7ff; border-bottom-color:#99b7ff; box-shadow: 0 0 0 2px rgba(59,130,246,.25); }
 .toolbar .tab .close{ border:none; background:transparent; cursor:pointer; color:#64748b; }
 .toolbar .add{ margin-left:6px; width:28px; height:28px; border:1px solid #e5e7eb; background:#fff; border-radius:8px; cursor:pointer; }
-.editor-wrap{ position:relative; overflow: hidden; flex: 0 0 auto; width:100%; z-index:1; }
+.editor-wrap{ position:relative; overflow: visible; flex: 0 0 auto; width:100%; z-index:1; }
 .editor{ height:150px; min-height:100px; overflow:hidden; position:relative; }
 .tabs + .editor-wrap { margin-top: 0; }
 .editor :deep(.cm-editor){ height:100% !important; max-width:100%; position: relative; z-index: 1; }
@@ -992,6 +1000,10 @@ onUpdated(() => {
   /* 仅在内容超出时触发横向滚动：不再强制比容器更宽 */
   min-width: 100%;
 }
+.editor :deep(.cm-tooltip){ z-index: 30000; position: absolute; }
+.editor :deep(.cm-tooltip-autocomplete){ z-index: 30010; }
+.editor :deep(.cm-content) { caret-color: #111827; }
+.editor :deep(.cm-cursor) { border-left-color: #111827 !important; }
 .editor :deep(.cm-scroller::-webkit-scrollbar){ width:10px; height:10px; }
 .editor :deep(.cm-scroller::-webkit-scrollbar-thumb){ background:#94a3b8; border-radius:6px; }
 .editor :deep(.cm-scroller::-webkit-scrollbar-thumb:hover){ background:#64748b; }
@@ -1030,5 +1042,6 @@ onUpdated(() => {
 /* 浮动库过滤输入框样式 */
 .db-filter-float{ position: fixed; z-index: 12000; height: 28px; padding: 4px 8px; border:1px solid #93c5fd; border-radius:6px; background:#fff; color:#0b57d0; box-shadow:0 8px 24px rgba(0,0,0,.15); width: 220px; outline:none; }
 .db-filter-float:focus{ border-color:#93c5fd; box-shadow:0 0 0 2px rgba(147,197,253,.35); }
+/* 移除自绘补全面板样式，使用 CodeMirror 自带面板 */
 </style>
 
