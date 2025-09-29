@@ -94,3 +94,25 @@ INSERT INTO t_dmmx(`dm`,`dmm`,`dmmc`,`status`) VALUES
  ('03','0','失效','1'),
  ('03','1','有效','1');
 ```
+
+---
+
+## 主机管理表
+
+```sql
+CREATE TABLE `t_server` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT COMMENT '标识',
+  `server_desc` VARCHAR(100) DEFAULT NULL COMMENT '服务器描述',
+  `server_ip`   VARCHAR(100) NOT NULL COMMENT '服务器地址',
+  `server_port` VARCHAR(10)  NOT NULL COMMENT '服务器端口',
+  `server_user` VARCHAR(20)  NOT NULL COMMENT '用户名',
+  `server_pass` VARCHAR(200) NOT NULL COMMENT '密码',
+  `server_os`   VARCHAR(100) NOT NULL COMMENT '系统,t_dmlx(dm=04)', 
+  `status`      VARCHAR(20)  NOT NULL COMMENT '状态,t_dmlx(dm=05)',
+  `create_time` DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `creator`     VARCHAR(20)  DEFAULT NULL COMMENT '创建人',
+  `update_time` DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最近更新时间',
+  `updator`     VARCHAR(20)  DEFAULT NULL COMMENT '更新人',
+  PRIMARY KEY (`id`)
+) ENGINE=INNODB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4;
+```
