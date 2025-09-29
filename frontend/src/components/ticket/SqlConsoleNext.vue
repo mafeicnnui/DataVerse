@@ -5,10 +5,10 @@
       <div class="hdr-actions sticky" ref="toolbarActionsRef">
         <button class="icon-btn add" :disabled="running" @click="exec" title="执行"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
         <button class="icon-btn warn" :disabled="!running" @click="stop" title="停止"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg></button>
-        <button class="icon-btn info" @click="beautify" title="格式化"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/></svg></button>
-        <button class="icon-btn" @click="viewPlan" title="执行计划"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zM3 9h2V7H3v2zm4 8h2v-6H7v6zm4 0h2V5h-2v12zm4 0h2v-8h-2v8zm4 0h2v-4h-2v4z"/></svg></button>
-        <button class="icon-btn" @click="exportCSV" title="导出 CSV"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5v5h5v4zm-8.5 4.5H8l-1-1-1 1H4.5l2-2-2-2H6l1 1 1-1h1.5l-2 2 2 2zm3.5.5c-1.1 0-2-.9-2-2h1.5a.5.5 0 1 0 1 0c0-.3-.2-.5-.6-.7l-.4-.1c-1-.3-1.5-.9-1.5-1.7 0-1.1.9-2 2-2s2 .9 2 2h-1.5a.5.5 0 1 0-1 0c0 .2.2 .4 .6 .6l.4 .1c1 .3 1.5 1 1.5 1.8 0 1.1-.9 2-2 2zm4 .5-1.8-5H16l2 6h1l2-6h-1.2L18.5 18z"/></svg></button>
-        <button class="icon-btn" @click="exportExcel" title="导出 Excel"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 2H8a2 2 0 0 0-2 2v3h2V4h11v16H8v-3H6v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM5 7H3l3.5 5L3 17h2l2-3.6L10 17h2L8.5 12 12 7H10L7.5 10.6 5 7z"/></svg></button>
+        <button class="icon-btn info" :disabled="running" @click="beautify" title="格式化"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/></svg></button>
+        <button class="icon-btn" :disabled="running" @click="viewPlan" title="执行计划"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zM3 9h2V7H3v2zm4 8h2v-6H7v6zm4 0h2V5h-2v12zm4 0h2v-8h-2v8zm4 0h2v-4h-2v4z"/></svg></button>
+        <button class="icon-btn" :disabled="running" @click="exportCSV" title="导出 CSV"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5v5h5v4zm-8.5 4.5H8l-1-1-1 1H4.5l2-2-2-2H6l1 1 1-1h1.5l-2 2 2 2zm3.5.5c-1.1 0-2-.9-2-2h1.5a.5.5 0 1 0 1 0c0-.3-.2-.5-.6-.7l-.4-.1c-1-.3-1.5-.9-1.5-1.7 0-1.1.9-2 2-2s2 .9 2 2h-1.5a.5.5 0 1 0-1 0c0 .2.2 .4 .6 .6l.4 .1c1 .3 1.5 1 1.5 1.8 0 1.1-.9 2-2 2zm4 .5-1.8-5H16l2 6h1l2-6h-1.2L18.5 18z"/></svg></button>
+        <button class="icon-btn" :disabled="running" @click="exportExcel" title="导出 Excel"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 2H8a2 2 0 0 0-2 2v3h2V4h11v16H8v-3H6v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM5 7H3l3.5 5L3 17h2l2-3.6L10 17h2L8.5 12 12 7H10L7.5 10.6 5 7z"/></svg></button>
       </div>
     </header>
     <div class="layout" :style="{ '--left-w': leftWidth + 'px' }">
@@ -170,6 +170,7 @@ const editorWrapRef = ref<HTMLElement|null>(null)
 const editorRef = ref<HTMLElement|null>(null)
 let cmView: any = null
 const running = ref(false)
+let currentAbort: AbortController | null = null
 const result = ref<any|null>(null)
 const currentDb = ref('')
 const editorHeight = ref(150)
@@ -230,6 +231,7 @@ const tq = reactive<any>({
   sortDir: 'asc',
   page,
   pageSize,
+  isRunning: computed(()=> running.value),
   qTabs: [] as any[],
   activeQueryTabId: '' as any
 })
@@ -538,13 +540,18 @@ async function exec(){
   const txtGlobal = (globalThis as any).__next_sql_text
   const sql = (typeof txtGlobal==='string' && txtGlobal.trim()) ? txtGlobal : ''
   if(!sql) return
+  // 若已有执行在进行，则直接返回，防止并发执行
+  if (running.value) return
   ensureActionBarVisible()
   page.value = Math.max(1, page.value)
   running.value=true; result.value={ type:'text', text:'执行中...' }
+  // 创建取消控制器
+  try { if (currentAbort) currentAbort.abort() } catch {}
+  currentAbort = new AbortController()
   try{
     const payload:any = { connId: connId.value, sql, page: page.value, pageSize: pageSize.value }
     if (currentDb.value) payload.database = currentDb.value
-    const {data}=await api.post('/ticket/execute', payload)
+    const {data}=await api.post('/ticket/execute', payload, { signal: (currentAbort as any)?.signal })
     if (data && Array.isArray(data.data) && Array.isArray(data.columns)) {
       result.value={ type:'table', data:data.data, columns:data.columns }
       totalRows.value = Number(data.total || data.count || data.totalRows || data.data.length || 0)
@@ -566,8 +573,9 @@ async function exec(){
       result.value={ type:'text', text: '执行完成' }
     }
   }catch(e:any){
-    result.value={ type:'text', text: e?.response?.data?.detail || e?.message || '执行失败' }
-  } finally{ running.value=false }
+    const aborted = (e && (e.name==='CanceledError' || e.name==='AbortError'))
+    result.value={ type:'text', text: aborted ? '已停止执行' : (e?.response?.data?.detail || e?.message || '执行失败') }
+  } finally{ running.value=false; try{ currentAbort = null }catch{} }
   await nextTick()
   computeColWidths()
   resetTableScroll()
@@ -591,7 +599,12 @@ async function exec(){
   ensureActionBarVisible()
   setTimeout(() => ensureActionBarVisible(), 0)
 }
-function stop(){ running.value=false; ensureActionBarVisible(); setTimeout(() => ensureActionBarVisible(), 0) }
+function stop(){
+  try { currentAbort && currentAbort.abort() } catch {}
+  running.value=false
+  ensureActionBarVisible()
+  setTimeout(() => ensureActionBarVisible(), 0)
+}
 function viewPlan(){ /* 保留占位，与旧页一致 */ }
 function beautify(){ try{ if(!cmView) return; let s=cmView.state.doc.toString(); s=s.replace(/[\t ]+/g,' ').replace(/\s*;\s*/g,';\n').replace(/\n{3,}/g,'\n\n').trim()+'\n'; cmView.dispatch({ changes:{ from:0, to: cmView.state.doc.length, insert: s } }); (globalThis as any).__next_sql_text = s }catch{} }
 
@@ -710,7 +723,7 @@ function updateActiveTabText(txt:string){ const t = tabs.find(x=>x.id===activeTa
 
 // 将本地 tabs 同步到 tq（供 SqlTabs 复用旧样式）
 watchEffect(() => {
-  tq.qTabs = tabs.map(t => ({ id: t.id, title: t.title, ui: { dirty: !!t.dirty } }))
+  tq.qTabs = tabs.map(t => ({ id: t.id, title: t.title, ui: { dirty: !!t.dirty, disabled: running.value } }))
   tq.activeQueryTabId = activeTab.value
 })
 
@@ -984,6 +997,7 @@ onUpdated(() => {
 .hdr-actions .icon-btn:active{ transform: translateY(1px); }
 .hdr-actions .icon-btn:focus-visible{ outline: 2px solid #93c5fd; outline-offset: 2px; }
 .hdr-actions .icon-btn svg{ width:16px; height:16px; }
+.hdr-actions .icon-btn:disabled{ opacity:.6; cursor:not-allowed; box-shadow:none; }
 .toolbar-actions .icon-btn{ width:32px; height:32px; border-radius:10px; }
 .toolbar-actions .icon-btn svg{ width:18px; height:18px; }
 .toolbar .tab, .tabs .tab{ display:flex; align-items:center; gap:6px; padding:6px 12px; background:#f7f9fc; border:1px solid #e5e7eb; border-bottom-color:#e5e7eb; border-radius:10px 10px 0 0; cursor:pointer; color:#374151; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: var(--dv-font-ui, 14px); box-shadow: 0 1px 2px rgba(0,0,0,.04); }
