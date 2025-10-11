@@ -97,8 +97,8 @@ if errorlevel 1 (
   del /f /q "%_PIPLOG%" >NUL 2>&1
 )
 
-REM 4) Start backend
-set UVICORN_CMD=uvicorn app.main:app --reload --port %PORT% --app-dir %APP_DIR%
+REM 4) Start backend (listen on all interfaces for LAN/IP access)
+set UVICORN_CMD=uvicorn app.main:app --reload --host 0.0.0.0 --port %PORT% --app-dir %APP_DIR%
 echo [start_backend] Starting: %UVICORN_CMD%
 %UVICORN_CMD%
 

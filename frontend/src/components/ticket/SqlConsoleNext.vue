@@ -18,6 +18,7 @@
           <div class="inst" v-for="inst in instances" :key="'i-'+inst.id">
             <div class="inst-hd" @click="toggleConn(inst.id)" @mouseenter="hoverInst=inst.id" @mouseleave="hoverInst=''">
               <span class="arrow" :class="{open: expandConn[inst.id]}" aria-hidden="true">›</span>
+              <svg class="ico inst" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 4h18v8H3V4zm2 2v4h14V6H5zm-2 8h18v6H3v-6zm2 2v2h6v-2H5zm8 0v2h6v-2h-6z"/></svg>
               <span class="label" :title="inst.ip + ':' + inst.port">
                 {{ inst.description || (inst.ip + ':' + inst.port) || ('#' + inst.id) }}
               </span>
@@ -47,6 +48,7 @@
               <li class="db" v-for="db in filteredDbList(inst.id)" :key="'db-'+inst.id+'-'+db">
                 <div class="db-hd" @click="toggleDb(inst.id, db)" @mouseenter="hoverDb=inst.id+':'+db" @mouseleave="onDbMouseLeave(inst.id, db)">
                   <span class="arrow" :class="{open: !!expandDbByConn[inst.id]?.[db]}" aria-hidden="true">›</span>
+                  <svg class="ico db" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3c-4.97 0-9 1.79-9 4v10c0 2.21 4.03 4 9 4s9-1.79 9-4V7c0-2.21-4.03-4-9-4zm0 2c3.87 0 7 .9 7 2s-3.13 2-7 2-7-.9-7-2 3.13-2 7-2zm0 6c3.87 0 7-.9 7-2v3c0 1.1-3.13 2-7 2s-7-.9-7-2V9c0 1.1 3.13 2 7 2zm0 7c-3.87 0-7-.9-7-2v-3c0 1.1 3.13 2 7 2s7-.9 7-2v3c0 1.1-3.13 2-7 2z"/></svg>
                   <span class="label" :title="db">{{ db }}</span>
                   <button
                     v-show="hoverDb===inst.id+':'+db || !!dbFilterTextByKey[keyOf(inst.id, db)] || dbFilterVisibleKey===keyOf(inst.id, db)"
@@ -58,7 +60,10 @@
                   <input v-if="dbFilterVisibleKey==='__inline__never__'" class="db-filter-input" />
                 </div>
                 <ul v-show="expandDbByConn[inst.id]?.[db]" class="tbls">
-                  <li class="tbl" v-for="t in filteredTablesForDisplay(inst.id, db)" :key="'t-'+inst.id+'-'+db+'-'+t" @click="appendSnip(db, t)">{{ t }}</li>
+                  <li class="tbl" v-for="t in filteredTablesForDisplay(inst.id, db)" :key="'t-'+inst.id+'-'+db+'-'+t" @click="appendSnip(db, t)">
+                    <svg class="ico tbl" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v14H3V5zm2 2v2h14V7H5zm0 4v2h14v-2H5zm0 4v2h14v-2H5z"/></svg>
+                    {{ t }}
+                  </li>
                   <li class="muted" v-if="loadingKey(inst.id, db)">加载中...</li>
                   <li class="muted" v-else-if="emptyKey(inst.id, db)">无表</li>
                 </ul>
@@ -1004,6 +1009,10 @@ onUpdated(() => {
 .inst-hd:hover,.db-hd:hover{ background:#eef2ff; }
 .arrow{ display:inline-block; width:10px; color:#64748b; }
 .arrow.open{ transform:rotate(90deg); }
+.ico{ width:14px; height:14px; color:#60a5fa; flex:0 0 auto; }
+.ico.inst{ color:#34d399 }
+.ico.db{ color:#60a5fa }
+.ico.tbl{ color:#93c5fd; margin-right:4px }
 .mini{ display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border:1px solid #cbd5e1; border-radius:4px; background:#fff; color:#334155; position:absolute; right:6px; top:4px; }
 .mini.filter.active{ background:#e6f0ff; border-color:#93c5fd; color:#0b57d0; }
 /* 库级过滤输入：与库名同一行，显示在库名右侧，不覆盖库名 */

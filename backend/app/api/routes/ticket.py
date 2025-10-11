@@ -175,6 +175,25 @@ async def list_tables_by_path(
         raise HTTPException(status_code=400, detail=f"Failed to list tables: {e}")
 
 
+# 4.1) 兼容路径：/api/connections/{conn_id}/databases/{database}/tables
+# 一些前端实现会按 REST 风格组织路径，这里提供等价别名，便于前端无感对接
+@router.get("/api/connections/{conn_id}/databases/{database}/tables", response_model=List[str])
+async def list_tables_by_nested_path(
+    conn_id: int,
+    database: str,
+    db: AsyncSession = Depends(get_db),
+):
+    if not database:
+        raise HTTPException(status_code=400, detail="database is required")
+
+    entity = await _get_conn_entity(conn_id, db)
+
+    try:
+        return await _list_mysql_tables(entity, database)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to list tables: {e}")
+
+
 # 5) /api/ticket/columns?connId=1&db=xxx&table=yyy
 @router.get("/api/ticket/columns", response_model=List[str])
 async def list_columns(
