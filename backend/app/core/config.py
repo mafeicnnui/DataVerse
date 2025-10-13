@@ -19,11 +19,10 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[Union[str, AnyHttpUrl]] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
+        "http://10.16.45.135:5173"
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "http://10.16.45.135:5173"
+        "http://10.16.45.135:3000",
     ]
     # 允许通过 IP 访问的前端来源（正则）。例如：http://10.16.45.135:5173
     # 可通过环境变量 CORS_ORIGIN_REGEX 覆盖

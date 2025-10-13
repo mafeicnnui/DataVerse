@@ -275,11 +275,23 @@ async def execute_sql(payload: ExecuteRequest, db: AsyncSession = Depends(get_db
             password=entity.password or "",
             database=payload.database or payload.schema or payload.db or None,
             connect_timeout=10,
+            # 提高客户端读写超时，避免大查询/慢网络导致 2013 丢失连接
+            read_timeout=600,
+            write_timeout=600,
             cursorclass=DictCursor,
             autocommit=True,
         )
         try:
             with conn.cursor() as cur:
+                # 提升会话级超时，降低网络抖动导致的 2013 断开
+                try:
+                    cur.execute("SET SESSION net_read_timeout=%s", (600,))
+                except Exception:
+                    pass
+                try:
+                    cur.execute("SET SESSION net_write_timeout=%s", (600,))
+                except Exception:
+                    pass
                 raw = _get_first_nonempty_sql(payload.sql)
                 # 去掉开头的注释与空行，避免 '-- xxx' 开头导致无法识别为 SELECT
                 def _strip_leading_comments(s: str) -> str:
@@ -310,7 +322,14 @@ async def execute_sql(payload: ExecuteRequest, db: AsyncSession = Depends(get_db
                 # 仅对 SELECT 语句做分页与总数
                 if upper.startswith("SELECT"):
                     # 直通模式：尊重 SQL 内置 LIMIT/OFFSET，不做后端分页/计数/ORDER BY 外提
-                    if payload.respectInnerLimit:
+                    # 如果检测到原始 SQL 已包含 LIMIT，则默认启用直通以避免对大表执行 COUNT(*)
+                    has_limit = False
+                    try:
+                        has_limit = bool(re.search(r"(?is)\blimit\b", raw_clean))
+                    except Exception:
+                        has_limit = False
+
+                    if payload.respectInnerLimit or has_limit:
                         try:
                             # 去掉尾部分号，防止部分驱动因分号报错
                             direct_sql = re.sub(r"(?is)\s*;\s*$", "", raw_clean)
@@ -348,11 +367,21 @@ async def execute_sql(payload: ExecuteRequest, db: AsyncSession = Depends(get_db
                         page_size = 50
                     offset = (page - 1) * page_size
 
-                    # 计算总数
-                    count_sql = f"SELECT COUNT(*) AS total FROM ({raw_base}) AS _t"
-                    cur.execute(count_sql)
-                    total_row = cur.fetchone()
-                    total = int(total_row[0] if isinstance(total_row, (list, tuple)) else total_row.get('total', 0))
+                    # 为 COUNT 设置一个较小的会话级超时时间，避免长时间阻塞；失败则跳过总数
+                    total = None
+                    try:
+                        try:
+                            # MySQL 5.7+ 支持，单位毫秒；不支持时忽略
+                            cur.execute("SET SESSION max_execution_time=%s", (30000,))
+                        except Exception:
+                            pass
+                        count_sql = f"SELECT COUNT(*) AS total FROM ({raw_base}) AS _t"
+                        cur.execute(count_sql)
+                        total_row = cur.fetchone()
+                        total = int(total_row[0] if isinstance(total_row, (list, tuple)) else total_row.get('total', 0))
+                    except Exception:
+                        # 计数超时/失败，忽略总数
+                        total = None
 
                     # 分页查询（MySQL 支持 LIMIT size OFFSET offset 或 LIMIT offset, size）
                     outer_order = f" {order_by_clause} " if order_by_clause else " "

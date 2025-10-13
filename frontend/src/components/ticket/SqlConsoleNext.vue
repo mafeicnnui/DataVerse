@@ -82,7 +82,7 @@
       </aside>
       <div class="vsplit" @mousedown="startDrag"></div>
       <!-- 右侧：编辑器在上，结果在下（保持与旧页一致的按钮组） -->
-      <main class="right" :style="{ '--left-w': leftWidth + 'px' }">
+      <main class="right" :style="{ '--left-w': leftWidth + 'px' }" @mousemove="onDragHover">
         <!-- 浮动库表过滤输入框：允许跨出左侧区域显示在右侧 -->
         <input
           v-if="dbFilterPopup.show"
@@ -577,7 +577,19 @@ async function loadTablesByConnDb(id:any, db:string){
 
 function startDrag(e:MouseEvent){ const sx=e.clientX, sw=leftWidth.value; const onMove=(ev:MouseEvent)=>{ leftWidth.value=Math.max(180, Math.min(560, sw + ev.clientX - sx)) }; const onUp=()=>{ window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp)}; window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp, {once:true}) }
 
-function startHDrag(e:MouseEvent){ const sy=e.clientY, sh=editorHeight.value; const onMove=(ev:MouseEvent)=>{ const nh = Math.max(100, Math.min(600, sh + ev.clientY - sy)); editorHeight.value = nh; try{ cmView && cmView.requestMeasure && cmView.requestMeasure() }catch{} }; const onUp=()=>{ editorHeightCommitted.value = editorHeight.value; refreshEditorLayout(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp)}; window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp, {once:true}) }
+function startHDrag(e:MouseEvent){ const sy=e.clientY, sh=editorHeight.value; try{ document.body.style.cursor='row-resize'; document.documentElement.classList.add('no-select') }catch{}; const onMove=(ev:MouseEvent)=>{ const nh = Math.max(0, Math.min(600, sh + ev.clientY - sy)); editorHeight.value = nh; try{ cmView && cmView.requestMeasure && cmView.requestMeasure() }catch{} }; const onUp=()=>{ editorHeightCommitted.value = editorHeight.value; refreshEditorLayout(); try{ document.body.style.cursor=''; document.documentElement.classList.remove('no-select') }catch{}; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp)}; window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp, {once:true}) }
+
+function onDragHover(ev: MouseEvent){
+  try {
+    const y = ev.clientY
+    const rectWrap = (editorWrapRef.value as HTMLElement | null)?.getBoundingClientRect()
+    if (rectWrap) {
+      const barTop = rectWrap.bottom
+      const near = Math.abs(y - barTop) <= 12
+      document.body.style.cursor = near ? 'row-resize' : ''
+    }
+  } catch {}
+}
 
 function appendSnip(db:string, tbl:string){
   currentDb.value = db
@@ -611,6 +623,7 @@ async function exec(){
   currentAbort = new AbortController()
   try{
     const payload:any = { connId: connId.value, sql, page: page.value, pageSize: pageSize.value }
+    try { if (/\blimit\b/i.test(sql)) payload.respectInnerLimit = true } catch {}
     if (currentDb.value) payload.database = currentDb.value
     const {data}=await api.post('/ticket/execute', payload, { signal: (currentAbort as any)?.signal })
     if (data && Array.isArray(data.data) && Array.isArray(data.columns)) {
@@ -1096,8 +1109,8 @@ onUpdated(() => {
 .toolbar .tab.active, .tabs .tab.active{ background:#fff; border-color:#99b7ff; border-bottom-color:#99b7ff; box-shadow: 0 0 0 2px rgba(59,130,246,.25); }
 .toolbar .tab .close{ border:none; background:transparent; cursor:pointer; color:#64748b; }
 .toolbar .add{ margin-left:6px; width:28px; height:28px; border:1px solid #e5e7eb; background:#fff; border-radius:8px; cursor:pointer; }
-.editor-wrap{ position:relative; overflow: visible; flex: 0 0 auto; width:100%; z-index:1; }
-.editor{ height:150px; min-height:100px; overflow:hidden; position:relative; }
+.editor-wrap{ position:relative; overflow: visible; flex: 0 0 auto; width:100%; z-index:1; min-height:0; }
+.editor{ height:150px; min-height:0; overflow:hidden; position:relative; }
 .tabs + .editor-wrap { margin-top: 0; }
 .editor :deep(.cm-editor){ height:100% !important; max-width:100%; position: relative; z-index: 1; }
 .editor :deep(.cm-scroller){ height:100%; overflow:auto; scrollbar-width: thin; padding-right:0; padding-bottom:0; max-width:100%; width: 100%; }
@@ -1114,8 +1127,8 @@ onUpdated(() => {
 .editor :deep(.cm-scroller::-webkit-scrollbar-thumb){ background:#94a3b8; border-radius:6px; }
 .editor :deep(.cm-scroller::-webkit-scrollbar-thumb:hover){ background:#64748b; }
 .editor :deep(.cm-scroller::-webkit-scrollbar-track){ background:transparent; }
-.hsplit{ height:16px; cursor:row-resize; position:relative; background:transparent; }
-.hsplit::before{ content:""; position:absolute; left:0; right:0; top:5px; height:2px; background:#cfd3dc; }
+.hsplit{ height:24px; cursor:row-resize; position:relative; background:transparent; z-index:5; pointer-events:auto; }
+.hsplit::before{ content:""; position:absolute; left:0; right:0; top:10px; height:3px; background:#cfd3dc; }
 .fab-actions{ position:absolute; right:12px; top:6px; display:flex; gap:8px; z-index:30; pointer-events:auto; background:#f1f5f9; padding:4px 6px; border-radius:8px; box-shadow:0 6px 16px rgba(15,23,42,0.12); }
 .code{ width:100%; height:100%; padding:10px; border:1px solid #e5e7eb; border-radius:8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:13px; line-height:1.6; outline:none; overflow:auto; white-space: pre-wrap; }
 .result{ display:flex; flex-direction:column; min-height:0; position:relative; z-index:1; background:#f8fafc; }
@@ -1149,5 +1162,6 @@ onUpdated(() => {
 .db-filter-float{ position: fixed; z-index: 12000; height: 28px; padding: 4px 8px; border:1px solid #93c5fd; border-radius:6px; background:#fff; color:#0b57d0; box-shadow:0 8px 24px rgba(0,0,0,.15); width: 220px; outline:none; }
 .db-filter-float:focus{ border-color:#93c5fd; box-shadow:0 0 0 2px rgba(147,197,253,.35); }
 /* 移除自绘补全面板样式，使用 CodeMirror 自带面板 */
+.no-select, .no-select *{ -webkit-user-select: none !important; user-select: none !important; }
 </style>
 

@@ -251,7 +251,7 @@
           <div class="tq-right" ref="tqRightRef">
             <!-- 紧凑型标签栏 -->
             <SqlTabs />
-            <div class="tq-editor-host" :style="{ height: Math.max(170, Number(tq.editorHeight||0)) + 'px' }" @click="onSqlHostClick">
+            <div class="tq-editor-host" :style="{ height: Math.max(0, Number(tq.editorHeight||0)) + 'px' }" @click="onSqlHostClick">
               <SqlEditor />
             </div>
             <div class="tq-vsplit" title="拖动调整编辑器与结果高度" @mousedown="startEditorVResize"></div>
@@ -577,9 +577,8 @@ async function openConsole(connId) {
       if (len > 0) tqEditorView.dispatch({ changes: { from: 0, to: len, insert: '' } })
     }
   } catch {}
-  // 设定编辑器默认高度，支持后续拖拽调整
-  // 统一首帧高度为 170：小于 170 则钳制
-  if (!tq.editorHeight || tq.editorHeight < 170) tq.editorHeight = 170
+  // 设定编辑器默认高度，支持后续拖拽调整（允许从 0 起步，方便最小化）
+  if (typeof tq.editorHeight !== 'number') tq.editorHeight = 150
 }
 
 function closeConsole() {
@@ -642,8 +641,8 @@ function startEditorVResize(e) {
     if (!right) return
     const rect = right.getBoundingClientRect()
     const startY = e.clientY
-    const startH = Math.max(170, Number(tq.editorHeight || 0))
-    const minEditor = 120
+    const startH = Math.max(0, Number(tq.editorHeight || 0))
+    const minEditor = 0
     const minResult = 140
     const maxEditor = Math.max(minEditor, rect.height - minResult)
     const onMove = (ev) => {
@@ -656,13 +655,13 @@ function startEditorVResize(e) {
       try {
         const editorEl = tqEditorRef?.value
         if (editorEl) {
-          const px = tq.editorHeight + 'px'
+          const px = Math.max(0, tq.editorHeight) + 'px'
           editorEl.style.height = px
           editorEl.style.flexBasis = px
           editorEl.style.setProperty('--tq-editor-h', px)
         }
         if (tqEditorView) {
-          const px = tq.editorHeight + 'px'
+          const px = Math.max(0, tq.editorHeight) + 'px'
           tqEditorView.dom.style.height = px
           tqEditorView.scrollDOM.style.height = px
         }
