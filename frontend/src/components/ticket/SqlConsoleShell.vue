@@ -128,7 +128,7 @@
             <SqlTabs />
           </div>
           <!-- 编辑器区域 -->
-          <div class="tq-editor-wrap" :style="{ height: Math.max(170, Number(state.editorHeight || 0) || 0, 0) + 'px' }">
+          <div class="tq-editor-wrap" :style="{ height: Math.max(0, Number(state.editorHeight || 0) || 0) + 'px' }">
             <SqlEditor />
         </div>
         <div class="tq-vsplit" title="拖动调整编辑器高度" @mousedown="startResize"></div>
@@ -331,10 +331,10 @@ onMounted(async () => {
   try { if (!state.qTabs || state.qTabs.length === 0) newQueryTab() } catch {}
   // 初始化编辑器（独立页 contenteditable 版本）
   try { await ensureSqlEditor(tqCodeRef.value as any) } catch {}
-  // 初始化编辑器高度为 170px（若未设置或过小），确保分隔条处于编辑器外侧
+  // 初始化编辑器高度：若未设置则给一个默认值（允许后续拖到 0）
   try {
     const h = Number(state.editorHeight || 0)
-    if (!Number.isFinite(h) || h < 170) (state as any).editorHeight = 170
+    if (!Number.isFinite(h)) (state as any).editorHeight = 150
   } catch {}
   // 文档点击：点击外部关闭 DB 下拉
   document.addEventListener('mousedown', onDocClickCloseDb, true)
@@ -764,7 +764,7 @@ function startResize(ev?: MouseEvent) {
     if (!container) return
     const startY = (ev?.clientY ?? 0)
     const initH = Number(state.editorHeight || 220)
-    const minH = 170
+    const minH = 0
     // 与独立页面统一：结果区最小高度 140，避免分隔条侵入编辑器区域
     const minResult = 140
     const maxH = Math.max(minH + 80, (container.clientHeight || 600) - minResult)
@@ -775,6 +775,12 @@ function startResize(ev?: MouseEvent) {
         if (!Number.isFinite(h)) h = initH
         h = Math.max(minH, Math.min(maxH, Math.floor(h)))
         ;(state as any).editorHeight = h
+        try {
+          const wrap = document.querySelector('.tq-editor-wrap') as HTMLElement | null
+          const editor = document.querySelector('.tq-editor') as HTMLElement | null
+          if (wrap) wrap.style.height = Math.max(0, h) + 'px'
+          if (editor) editor.style.height = Math.max(0, h) + 'px'
+        } catch {}
       } catch {}
     }
     const onUp = () => {
@@ -941,7 +947,8 @@ provide('tqCtx', {
 .page .tq-result-body { display: flex; flex-direction: column; min-height: 0; }
 .page .tq-result-scroll { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-x: hidden !important; overflow-y: hidden !important; scrollbar-gutter: auto; }
 /* 保持表体仅负责横向滚动（底部外置横条联动） */
-.page :deep(.tq-body) { overflow-x: auto !important; }
+.page :deep(.tq-body) { overflow-x: hidden !important; }
+.page :deep(.result-table) .tq-body { overflow-x: hidden !important; }
 .tq-x-scroll { flex: 0 0 auto; height: 14px; overflow-x: auto; overflow-y: hidden; border-top: 1px solid #e5e7eb; background: #fff; width: 100%; max-width: 100%; }
 .modal .tq-x-scroll { border-top: none; }
 .page .tq-x-scroll { display: block !important; height: 10px; }
@@ -950,7 +957,7 @@ provide('tqCtx', {
 /* 结果表容器使用纵向 Flex，表体占剩余空间 */
 /* 与浮动窗一致：结果表容器纵向布局，表体承担纵向滚动（注意真实类名为 .tq-table-fixed/.tq-body） */
 .page :deep(.tq-table-fixed) { display: flex; flex-direction: column; min-height: 0; }
-.page :deep(.tq-body) { flex: 1 1 auto; min-height: 0; overflow-y: auto !important; overflow-x: auto !important; }
+.page :deep(.tq-body) { flex: 1 1 auto; min-height: 0; overflow-y: auto !important; overflow-x: hidden !important; }
 /* 统一表体纵向滚动条为 8px（应用于 .tq-body） */
 .page :deep(.tq-body) { scrollbar-width: thin; }
 .page :deep(.tq-body)::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -961,7 +968,7 @@ provide('tqCtx', {
 .page :deep(.tq-body)::-webkit-scrollbar:horizontal { height: 0 !important; }
 /* —— 仅保留底部浅色横向滚动条（page 模式）—— */
 /* 允许内部 body 横向滚动，但隐藏其横向滚动条的可见性，从而由底部浅色条驱动同步 */
-.page :deep(.result-table) .tq-body { overflow-x: auto !important; }
+.page :deep(.result-table) .tq-body { overflow-x: hidden !important; }
 /* scrollbar-width: none; -ms-overflow-style: none; */
 .page :deep(.tq-body-inner) { overflow-x: visible !important; }
 /* 不再通配隐藏所有滚动条，避免影响纵向；仅在下方针对横向隐藏外观 */
@@ -1016,7 +1023,7 @@ provide('tqCtx', {
 /* —— 最终覆盖（独立页）：仅表体纵向滚动，外层不纵滚，滚动起点=第1行 —— */
 .page .tq-result-scroll { overflow-y: hidden !important; overflow-x: hidden !important; display: flex; flex-direction: column; }
 .page :deep(.tq-table-fixed) { display: flex !important; flex-direction: column !important; flex: 1 1 auto !important; min-height: 0 !important; }
-.page :deep(.tq-table-fixed) .tq-body { flex: 1 1 auto !important; height: 100% !important; min-height: 0 !important; overflow-y: auto !important; overflow-x: auto !important; scrollbar-gutter: stable both-edges; }
+.page :deep(.tq-table-fixed) .tq-body { flex: 1 1 auto !important; height: 100% !important; min-height: 0 !important; overflow-y: auto !important; overflow-x: hidden !important; scrollbar-gutter: stable both-edges; }
 /* 仅隐藏表体横向滚动条外观，不影响纵向 */
 .page :deep(.tq-body)::-webkit-scrollbar:horizontal { height: 0 !important; background: transparent !important; }
 .page :deep(.tq-body)::-webkit-scrollbar-thumb:horizontal { background: transparent !important; }

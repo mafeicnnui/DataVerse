@@ -117,7 +117,7 @@ onBeforeUnmount(() => {
 .tq-head-inner { display: inline-block; min-height: 36px; height: 36px; background: #fff; }
 .tq-head-inner table { height: 36px; }
 
-.tq-body { display:flex; flex-direction:column; width: 100%; max-width: 100%; flex: 1 1 0%; min-height: 0; max-height: 100%; overflow-x: auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.tq-body { display:flex; flex-direction:column; width: 100%; max-width: 100%; flex: 1 1 0%; min-height: 0; max-height: 100%; overflow-x: hidden !important; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
 .tq-table { border-collapse: separate; border-spacing: 0; width: max-content; table-layout: fixed; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; color: #111827; }
 .tq-table thead { position: sticky; top: 0; z-index: 2; background: #f5f7ff; }
@@ -142,7 +142,7 @@ onBeforeUnmount(() => {
 .tq-body { scrollbar-width: thin; scrollbar-color: #94a3b8 transparent; }
 /* 仅显示纵向滚动条，隐藏横向滚动条（内部依然可编程滚动） */
 .tq-body::-webkit-scrollbar { width: 10px; height: 10px; }
-.tq-body::-webkit-scrollbar:horizontal { height: 0 !important; }
+.tq-body::-webkit-scrollbar:horizontal { height: 0 !important; display: none !important; }
 .tq-body::-webkit-scrollbar:vertical { width: 10px; }
 .tq-body::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; }
 .tq-body::-webkit-scrollbar-thumb:hover { background: #64748b; }

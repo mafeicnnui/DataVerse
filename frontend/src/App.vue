@@ -417,7 +417,7 @@
           </button>
           <div class="tq-right" ref="tqRightRef">
             <SqlTabs />
-            <div class="tq-editor-wrap" :style="{ height: Math.max(170, Number(tq.editorHeight||0)) + 'px' }">
+            <div class="tq-editor-wrap" :style="{ height: Math.max(0, Number(tq.editorHeight||0)) + 'px' }">
               <SqlEditor />
             </div>
             <div class="tq-vsplit" @mousedown="startEditorVResize" title="拖动调整编辑器高度"></div>
@@ -1006,10 +1006,10 @@ async function ensureSqlEditor() {
     return
   }
   try {
-    // 保障容器可见且可聚焦
+  // 保障容器可见且可聚焦
     host.tabIndex = 0
-    // 固定最小高度为 120px（默认也是 120px）
-    host.style.minHeight = '120px'
+  // 允许最小高度为 0，配合分割条可完全收起
+  host.style.minHeight = '0px'
     host.style.outline = host.style.outline || '2px solid #7db3ff44'
     host.style.borderRadius = host.style.borderRadius || '6px'
   } catch {}
@@ -1189,8 +1189,8 @@ async function ensureSqlEditor() {
     // 强化可见性与点击性（内联，避免被外层样式覆盖）
     const root = host.querySelector('.cm-editor')
     if (root) {
-      // 固定最小高度为 120px（默认也是 120px）
-      root.style.minHeight = '120px'
+      // 允许最小高度为 0
+      root.style.minHeight = '0px'
       root.style.background = root.style.background || '#fff'
       root.style.border = root.style.border || '1px solid #dcdfe6'
       root.style.borderRadius = root.style.borderRadius || '6px'

@@ -1,5 +1,5 @@
 <template>
-  <div class="tq-editor" :style="{ '--tq-editor-h': (ctx.tq.editorHeight || 170) + 'px', height: (ctx.tq.editorHeight || 170) + 'px' }" ref="tqEditorRefLocal">
+  <div class="tq-editor" :style="{ '--tq-editor-h': (Math.max(0, ctx.tq.editorHeight || 0)), height: (Math.max(0, ctx.tq.editorHeight || 0)) + 'px' }" ref="tqEditorRefLocal">
     <!-- 独立容器，仅用于 SQL 控制台；由 ensureSqlEditor 接管为 contenteditable -->
     <div ref="tqCodeRefLocal" class="tq-sql-console" aria-label="SQL 编辑器" title="在此编写 SQL... 支持 Ctrl+Enter 执行"></div>
   </div>
