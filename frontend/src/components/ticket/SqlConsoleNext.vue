@@ -298,7 +298,9 @@
                 <button :class="{active: ovTab==='meta'}" @click="ovTab='meta'">元数据</button>
               </div>
               <div class="ov-panel" v-if="ovTab==='ddl'">
-                <pre class="ddl">{{ ovDDL || (objectSelected ? '加载中...' : '请选择对象') }}</pre>
+                <div v-if="!objectSelected" class="ddl muted">请选择对象</div>
+                <div v-else-if="!ovDDL" class="ddl muted">加载中...</div>
+                <div v-else class="ddl cm-ddl" ref="ovDDLRef"></div>
               </div>
               <div class="ov-panel" v-else>
                 <div v-if="!objectSelected" class="muted" style="padding:8px">请选择对象</div>
@@ -323,7 +325,8 @@
             <button :class="{active: inspectorTab==='meta'}" @click="inspectorTab='meta'">元数据</button>
           </div>
           <div class="inspector-body" v-if="inspectorTab==='ddl'">
-            <pre class="ddl">{{ inspectorDDL || '加载中...' }}</pre>
+            <div v-if="!inspectorDDL" class="ddl muted">加载中...</div>
+            <div v-else class="ddl cm-ddl" ref="inspDDLRef"></div>
           </div>
           <div class="inspector-body" v-else>
             <div class="meta-item" v-for="(v,k) in inspectorMeta" :key="String(k)"><span class="k">{{ k }}</span><span class="v">{{ v }}</span></div>
@@ -460,6 +463,23 @@ async function openInspector(id:any, db:string, tbl:string){
       api.get('/ticket/table-status', { params: { connId: id, db: db, database: db, table: tbl } }),
     ])
     inspectorDDL.value = typeof ddl === 'string' ? ddl : JSON.stringify(ddl, null, 2)
+    // 渲染高亮
+    nextTick(() => {
+      try {
+        const host = inspDDLRef.value
+        if (host) {
+          host.innerHTML = ''
+          if (inspDDLView) { try { inspDDLView.destroy() } catch {} inspDDLView = null }
+          inspDDLView = new EditorView({
+            parent: host,
+            state: EditorState.create({
+              doc: inspectorDDL.value || '',
+              extensions: [sql({ dialect: MySQL }), syntaxHighlighting(defaultHighlightStyle), EditorView.editable.of(false)]
+            })
+          })
+        }
+      } catch {}
+    })
     Object.assign(inspectorMeta, meta || {})
   } catch (e:any) {
     inspectorDDL.value = e?.response?.data?.detail || e?.message || '加载失败'
@@ -506,6 +526,10 @@ const leftWidth = ref(270)
 const editorWrapRef = ref<HTMLElement|null>(null)
 const editorRef = ref<HTMLElement|null>(null)
 let cmView: any = null
+const inspDDLRef = ref<HTMLElement|null>(null)
+const ovDDLRef = ref<HTMLElement|null>(null)
+let inspDDLView: any = null
+let ovDDLView: any = null
 const running = ref(false)
 let currentAbort: AbortController | null = null
 const result = ref<any|null>(null)
@@ -617,6 +641,23 @@ async function selectObject(name:string){
       api.get('/ticket/table-status', { params: { connId: activeConnId.value, database: db, db, table: name } })
     ])
     ovDDL.value = typeof ddl==='string'?ddl:JSON.stringify(ddl,null,2)
+    // 渲染高亮
+    nextTick(() => {
+      try {
+        const host = ovDDLRef.value
+        if (host) {
+          host.innerHTML = ''
+          if (ovDDLView) { try { ovDDLView.destroy() } catch {} ovDDLView = null }
+          ovDDLView = new EditorView({
+            parent: host,
+            state: EditorState.create({
+              doc: ovDDL.value || '',
+              extensions: [sql({ dialect: MySQL }), syntaxHighlighting(defaultHighlightStyle), EditorView.editable.of(false)]
+            })
+          })
+        }
+      } catch {}
+    })
     Object.assign(ovMeta, meta||{})
   }catch(e:any){ ovDDL.value = e?.response?.data?.detail || e?.message || '加载失败' }
 }
@@ -1701,6 +1742,8 @@ onUpdated(() => {
 .inspector-tabs button.active{ background:#e6f0ff; border-color:#93c5fd; color:#0b57d0; }
 .inspector-body{ padding:10px; overflow:auto; }
 .inspector-body .ddl{ white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px; line-height: 1.5; }
+.cm-ddl :deep(.cm-editor){ height:auto; border:1px solid #e5e7eb; border-radius:6px; background:#fff; }
+.cm-ddl :deep(.cm-scroller){ overflow:auto; }
 .meta-item{ display:flex; gap:8px; padding:4px 0; font-size:13px; }
 .meta-item .k{ color:#64748b; min-width:140px; }
 .meta-item .v{ color:#0f172a; }
