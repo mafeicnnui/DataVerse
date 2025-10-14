@@ -74,6 +74,13 @@
                     <path d="M15.5 13.1v4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
                   </svg>
                 </button>
+                <!-- Next 版独立控制台（新窗口） -->
+                <button class="icon-btn sm next" @click="openNextStandalone(item)" title="Next 控制台(新窗口)" aria-label="Next 控制台(新窗口)">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+                    <!-- sparkles 图标，表示新一代 -->
+                    <path d="M14 3l1.5 3.5L19 8l-3.5 1.5L14 13l-1.5-3.5L9 8l3.5-1.5L14 3Zm-6 6l1 2.5L12 13l-3 1.5L8 17l-1-2.5L4 13l3-1.5L8 9Zm10 5l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z"/>
+                  </svg>
+                </button>
                 <!-- 独立控制台（新窗口）：紧挨在 SQL 控制台 右侧 -->
                 <button class="icon-btn sm" @click="openStandalone(item)" title="独立控制台(新窗口)" aria-label="独立控制台(新窗口)">
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
@@ -129,8 +136,8 @@ const keys = ['id','description','db_env','db_type','status','update_time']
 
 // 列宽（与头/体共享）——与 keys 长度一致（去掉“创建时间”后共6列）
 const tableColWidths = ref([80,280,100,100,100,180])
-// 追加“操作”列表头宽度
-const opColWidth = 160
+// 追加“操作”列表头宽度（为新增 Next 按钮留出空间）
+const opColWidth = 200
 // 总宽=数据列之和 + 操作列宽
 const bodyTableWidth = computed(() => (tableColWidths.value || []).reduce((s,n)=>s+(Number(n)||0),0) + opColWidth)
 const freezeCount = ref(0)
@@ -181,6 +188,16 @@ function openStandalone(item) {
     if (!id) return
     const url = `/db-console.html?connId=${encodeURIComponent(id)}`
     // 不使用 noopener，保证同源时 window.opener 可用于回到主页面打开浮动层
+    window.open(url, '_blank')
+  } catch {}
+}
+
+function openNextStandalone(item) {
+  try {
+    const id = item?.id
+    if (!id) return
+    // 指向 Next 版独立页（按需求使用固定 IP 端口）
+    const url = `${location.protocol}//10.16.45.135:5173/db-console-next.html?connId=${encodeURIComponent(id)}`
     window.open(url, '_blank')
   } catch {}
 }
