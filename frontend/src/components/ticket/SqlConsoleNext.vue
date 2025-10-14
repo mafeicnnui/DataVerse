@@ -99,10 +99,12 @@
                           <span class="label" @click.stop="toggleTableCats(inst.id, db, t)">{{ t }}</span>
                           <div class="inline-actions" aria-label="表操作">
                             <button class="tb-act" title="新建查询" @click.stop="insertQuickQuery(db, t)">
-                              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm3.92.83H5v-1.92L14.06 6.02l1.92 1.92L6.92 18.08zM20.71 5.63a.996.996 0 0 0 0-1.41L19.78 3.3a.996.996 0 1 0-1.41 1.41l.93.93c.39.39 1.02.39 1.41-.01z"/></svg>
+                              <!-- 加号：表示为该表新建查询 -->
+                              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                             </button>
                             <button class="tb-act" title="查看对象信息" @click.stop="openInspector(inst.id, db, t)">
-                              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></svg>
+                              <!-- 眼睛：查看对象信息（DDL/元数据） -->
+                              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 2a5 5 0 110 10 5 5 0 010-10z"/></svg>
                             </button>
                           </div>
                         </div>
@@ -1585,7 +1587,8 @@ onUpdated(() => {
 .table-hd .arrow.open{ transform: rotate(90deg); }
 .table-hd .inline-actions{ position:absolute; right:6px; top:50%; transform: translateY(-50%); display:flex; align-items:center; gap:8px; z-index:3; opacity:0; pointer-events:none; transition: opacity .12s ease; }
 .tbl:hover .inline-actions, .table-hd:hover .inline-actions{ opacity:1; pointer-events:auto; }
-.tb-act{ width:22px; height:22px; border:1px solid #cbd5e1; border-radius:4px; background:#fff; color:#0b57d0; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+.tb-act:hover{ background:#e6f0ff; border-color:#93c5fd; color:#0b57d0; }
+.tb-act{ width:24px; height:24px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#0b57d0; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; box-shadow:0 1px 2px rgba(0,0,0,.04); }
 .tb-act svg{ width:14px; height:14px; display:block; }
 .table-hd .inline-actions .mini:hover{ background:#e6f0ff; border-color:#93c5fd; }
 .table-cats{ list-style:none; margin:4px 0 8px 28px; padding:0; background:transparent; border:0; }
