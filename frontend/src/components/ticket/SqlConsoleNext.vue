@@ -59,13 +59,84 @@
                   >🔍</button>
                   <input v-if="dbFilterVisibleKey==='__inline__never__'" class="db-filter-input" />
                 </div>
-                <ul v-show="expandDbByConn[inst.id]?.[db]" class="tbls">
-                  <li class="tbl" v-for="t in filteredTablesForDisplay(inst.id, db)" :key="'t-'+inst.id+'-'+db+'-'+t" @click="appendSnip(inst.id, db, t)">
-                    <svg class="ico tbl" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v14H3V5zm2 2v2h14V7H5zm0 4v2h14v-2H5zm0 4v2h14v-2H5z"/></svg>
-                    {{ t }}
+                <!-- 数据库展开后的分类菜单 -->
+                <ul v-show="expandDbByConn[inst.id]?.[db]" class="cats">
+                  <!-- Tables 分类 -->
+                  <li class="cat">
+                    <div class="cat-hd" @click="toggleDbCategory(inst.id, db, 'tables')">
+                      <span class="arrow" :class="{open: isDbCatOpen(inst.id, db, 'tables')}" aria-hidden="true">›</span>
+                      <svg class="ico cat-tables" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 5h16v4H4V5zm0 5h16v4H4v-4zm0 5h16v4H4v-4z"/></svg>
+                      <span class="label">Tables</span>
+                    </div>
+                    <ul class="tbls" v-show="isDbCatOpen(inst.id, db, 'tables')">
+                      <li class="tbl" v-for="t in filteredTablesForDisplay(inst.id, db)" :key="'t-'+inst.id+'-'+db+'-'+t">
+                        <div class="table-hd">
+                          <span class="arrow" :class="{open: isTableOpen(inst.id, db, t)}" @click.stop="toggleTableCats(inst.id, db, t)" aria-hidden="true">›</span>
+                          <svg class="ico tbl" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v14H3V5zm2 2v2h14V7H5zm0 4v2h14v-2H5zm0 4v2h14v-2H5z"/></svg>
+                          <span class="label" @click="appendSnip(inst.id, db, t)">{{ t }}</span>
+                        </div>
+                        <!-- 每个表的子分类（列/索引/外键/触发器/事件） -->
+                        <ul class="table-cats" v-show="isTableOpen(inst.id, db, t)">
+                          <li class="subcat" @click.stop="toggleTableColumns(inst.id, db, t)">
+                            <svg class="ico col" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2z"/></svg>
+                            <span>Columns</span>
+                          </li>
+                          <ul v-show="isColumnsOpen(inst.id, db, t)" class="columns">
+                            <li class="muted" v-if="isColsLoading(inst.id, db, t)">加载中...</li>
+                            <li class="col-name" v-for="c in getColumns(inst.id, db, t)" :key="'c-'+inst.id+'-'+db+'-'+t+'-'+c">{{ c }}</li>
+                            <li class="muted" v-if="!isColsLoading(inst.id, db, t) && getColumns(inst.id, db, t).length===0">无列</li>
+                          </ul>
+                          <li class="subcat">
+                            <svg class="ico idx" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z"/></svg>
+                            <span>Indexes</span>
+                          </li>
+                          <li class="subcat">
+                            <svg class="ico fk" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 7h10v2H9v6H7V7zm10 6h-4v4h-2v-6h6v2z"/></svg>
+                            <span>Foreign Keys</span>
+                          </li>
+                          <li class="subcat">
+                            <svg class="ico trg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2 4 20l8-4 8 4-8-18z"/></svg>
+                            <span>Triggers</span>
+                          </li>
+                          <li class="subcat">
+                            <svg class="ico evt" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zm12 6H5v10h14V8z"/></svg>
+                            <span>Events</span>
+                          </li>
+                        </ul>
+                      </li>
+                      <li class="muted" v-if="loadingKey(inst.id, db)">加载中...</li>
+                      <li class="muted" v-else-if="emptyKey(inst.id, db)">无表</li>
+                    </ul>
                   </li>
-                  <li class="muted" v-if="loadingKey(inst.id, db)">加载中...</li>
-                  <li class="muted" v-else-if="emptyKey(inst.id, db)">无表</li>
+                  <!-- Views/Functions/Procedures/Events 分类（占位，可后续填充列表） -->
+                  <li class="cat">
+                    <div class="cat-hd" @click="toggleDbCategory(inst.id, db, 'views')">
+                      <span class="arrow" :class="{open: isDbCatOpen(inst.id, db, 'views')}" aria-hidden="true">›</span>
+                      <svg class="ico cat-views" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 2a5 5 0 110 10 5 5 0 010-10z"/></svg>
+                      <span class="label">Views</span>
+                    </div>
+                  </li>
+                  <li class="cat">
+                    <div class="cat-hd" @click="toggleDbCategory(inst.id, db, 'functions')">
+                      <span class="arrow" :class="{open: isDbCatOpen(inst.id, db, 'functions')}" aria-hidden="true">›</span>
+                      <svg class="ico cat-func" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 4h10v2H9v5h4a4 4 0 110 8H7v-2h6a2 2 0 100-4H7V4z"/></svg>
+                      <span class="label">Functions</span>
+                    </div>
+                  </li>
+                  <li class="cat">
+                    <div class="cat-hd" @click="toggleDbCategory(inst.id, db, 'procedures')">
+                      <span class="arrow" :class="{open: isDbCatOpen(inst.id, db, 'procedures')}" aria-hidden="true">›</span>
+                      <svg class="ico cat-proc" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h16v4H4V4zm0 6h10v4H4v-4zm0 6h16v4H4v-4z"/></svg>
+                      <span class="label">Procedures</span>
+                    </div>
+                  </li>
+                  <li class="cat">
+                    <div class="cat-hd" @click="toggleDbCategory(inst.id, db, 'events')">
+                      <span class="arrow" :class="{open: isDbCatOpen(inst.id, db, 'events')}" aria-hidden="true">›</span>
+                      <svg class="ico cat-evt" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2v2H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2h-2V2h-2v2H9V2H7zm12 6H5v10h14V8z"/></svg>
+                      <span class="label">Events</span>
+                    </div>
+                  </li>
                 </ul>
               </li>
             </ul>
@@ -193,6 +264,41 @@ const dbsByConn = reactive<Record<string|number, string[]>>({})
 const tablesByKey = reactive<Record<string, string[]>>({})
 const tablesLoading = reactive<Record<string, boolean>>({})
 const selectedDbByConn = reactive<Record<string|number, Set<string>>>({})
+// 数据库内分类展开状态：tables/views/functions/procedures/events
+const dbCatOpen = reactive<Record<string, Record<string, Record<string, boolean>>>>({}) // dbCatOpen[connId][db][cat] = bool
+function isDbCatOpen(id:any, db:string, cat:string){ return !!dbCatOpen[id]?.[db]?.[cat] }
+function toggleDbCategory(id:any, db:string, cat:string){ if (!dbCatOpen[id]) dbCatOpen[id] = {}; if (!dbCatOpen[id][db]) dbCatOpen[id][db] = {}; dbCatOpen[id][db][cat] = !dbCatOpen[id][db][cat] }
+
+// 列展开与缓存
+const openCols = reactive<Record<string, boolean>>({}) // key: connId::db::table
+const colsCache = reactive<Record<string, string[]>>({})
+const colsLoading = reactive<Record<string, boolean>>({})
+function colKey(id:any, db:string, tbl:string){ return `${id}::${db}::${tbl}` }
+function isColumnsOpen(id:any, db:string, tbl:string){ return !!openCols[colKey(id,db,tbl)] }
+function isColsLoading(id:any, db:string, tbl:string){ return !!colsLoading[colKey(id,db,tbl)] }
+function getColumns(id:any, db:string, tbl:string){ return colsCache[colKey(id,db,tbl)] || [] }
+// 表级展开状态
+const tableOpen = reactive<Record<string, boolean>>({})
+function tableKey(id:any, db:string, tbl:string){ return `${id}::${db}::${tbl}` }
+function isTableOpen(id:any, db:string, tbl:string){ return !!tableOpen[tableKey(id,db,tbl)] }
+function toggleTableCats(id:any, db:string, tbl:string){ tableOpen[tableKey(id,db,tbl)] = !tableOpen[tableKey(id,db,tbl)] }
+async function toggleTableColumns(id:any, db:string, tbl:string){
+  const k = colKey(id,db,tbl)
+  openCols[k] = !openCols[k]
+  if (openCols[k] && !(colsCache[k] && colsCache[k].length)) {
+    colsLoading[k] = true
+    try {
+      // 走现有列接口（兼容回退 URL）
+      const params = { connId: id, db, database: db, schema: db, table: tbl, tableName: tbl, tbl }
+      const { data } = await api.get('/ticket/columns', { params })
+      let cols: string[] = []
+      if (Array.isArray(data)) cols = data
+      else if (Array.isArray((data as any)?.columns)) cols = (data as any).columns
+      colsCache[k] = Array.from(new Set((cols || []).map((c:any)=> typeof c==='string'?c:(c?.name||c?.COLUMN_NAME||c?.column||c?.field||'')).filter(Boolean)))
+    } catch { colsCache[k] = colsCache[k] || [] }
+    finally { colsLoading[k] = false }
+  }
+}
 const instFilterVisible = ref<string|number>('')
 const instPanelPos = reactive<{left:number;top:number}>({ left: 0, top: 0 })
 const instSearch = ref('')
@@ -1141,9 +1247,23 @@ onUpdated(() => {
 .mini.filter.active{ background:#e6f0ff; border-color:#93c5fd; color:#0b57d0; }
 /* 库级过滤输入：与库名同一行，显示在库名右侧，不覆盖库名 */
 .db-filter-input{ position:static; margin-left:6px; height:22px; border:1px solid #cbd5e1; border-radius:4px; padding:0 6px; font-size:12px; min-width:140px; }
-.dbs, .tbls{ list-style:none; margin:0; padding:0 0 0 16px; }
+.dbs{ list-style:none; margin:0; padding:0 0 0 16px; }
+.cats{ list-style:none; margin:0; padding:4px 0 0 16px; }
+.tbls{ list-style:none; margin:0; padding:2px 0 0 16px; }
 .tbl{ padding:2px 6px; border-radius:4px; cursor:pointer; }
 .tbl:hover{ background:#f1f5f9; }
+.cat{ margin:2px 0; }
+.cat-hd{ display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:4px; cursor:pointer; color:#0f172a; }
+.cat-hd:hover{ background:#eef2ff; }
+.table-hd{ display:flex; align-items:center; gap:6px; padding:2px 0; cursor:pointer; margin-left:2px; }
+.table-hd .arrow{ display:inline-block; width:12px; transform: rotate(0deg); transition: transform .12s ease; }
+.table-hd .arrow.open{ transform: rotate(90deg); }
+.table-cats{ list-style:none; margin:4px 0 8px 28px; padding:0; background:transparent; border:0; }
+.subcat{ display:flex; align-items:center; gap:8px; padding:4px 6px; margin:6px 0; color:#475569; cursor:default; border-radius:6px; }
+.subcat:hover{ background:#f1f5f9; }
+.columns{ list-style:none; margin:6px 0 8px 18px; padding:0; }
+.col-name{ padding:2px 0; color:#111827; }
+.ico.cat-tables,.ico.cat-views,.ico.cat-func,.ico.cat-proc,.ico.cat-evt,.ico.col,.ico.idx,.ico.fk,.ico.trg,.ico.evt{ width:16px; height:16px; }
 .muted{ color:#9ca3af; padding:6px; }
 .panel{ position:absolute; top:0; z-index:1000; border:1px solid #e5e7eb; border-radius:8px; background:#fff; box-shadow:0 8px 16px rgba(0,0,0,.08); }
 .inst-panel{ position: fixed; width: 320px; max-height: 360px; overflow:auto; }
