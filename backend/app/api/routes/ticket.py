@@ -96,6 +96,143 @@ async def _list_mysql_tables(entity: Connection, database: str) -> List[str]:
     return await asyncio.to_thread(_work)
 
 
+# New: list MySQL indexes of a table
+async def _list_mysql_indexes(entity: Connection, database: str, table: str) -> List[str]:
+    import pymysql
+
+    def _work():
+        conn = pymysql.connect(
+            host=entity.ip,
+            port=int(entity.port),
+            user=entity.user or "",
+            password=entity.password or "",
+            database=database,
+            connect_timeout=5,
+            cursorclass=pymysql.cursors.Cursor,
+        )
+        try:
+            with conn.cursor() as cur:
+                # SHOW INDEX FROM 可返回多个列的组合索引；这里只提取 Key_name 去重
+                cur.execute(f"SHOW INDEX FROM `{table}`")
+                rows = cur.fetchall() or []
+                names = []
+                for r in rows:
+                    try:
+                        # pymysql 默认 cursor 返回 tuple
+                        # Key_name 通常在列名为 'Key_name' 或索引 2（依版本不同），做两种兜底
+                        if isinstance(r, (list, tuple)) and len(r) >= 3 and isinstance(r[2], str):
+                            names.append(r[2])
+                        elif isinstance(r, dict) and 'Key_name' in r:
+                            names.append(str(r['Key_name']))
+                    except Exception:
+                        continue
+                # 去重并排序
+                uniq = sorted(set([n for n in names if n]))
+                return uniq
+        finally:
+            conn.close()
+
+    return await asyncio.to_thread(_work)
+
+# DDL (SHOW CREATE TABLE)
+async def _get_mysql_ddl(entity: Connection, database: str, table: str) -> str:
+    import pymysql
+
+    def _work():
+        conn = pymysql.connect(
+            host=entity.ip,
+            port=int(entity.port),
+            user=entity.user or "",
+            password=entity.password or "",
+            database=database,
+            connect_timeout=5,
+            cursorclass=pymysql.cursors.Cursor,
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f"SHOW CREATE TABLE `{table}`")
+                row = cur.fetchone()
+                if isinstance(row, (list, tuple)) and len(row) >= 2:
+                    return str(row[1])
+                if isinstance(row, dict):
+                    # 兼容某些驱动: {'Table': 'xxx', 'Create Table': 'DDL...' }
+                    for k in row:
+                        if 'create' in k.lower():
+                            return str(row[k])
+                return ''
+        finally:
+            conn.close()
+
+    return await asyncio.to_thread(_work)
+
+# Table status / metadata
+async def _get_mysql_table_status(entity: Connection, database: str, table: str) -> dict:
+    import pymysql
+
+    def _work():
+        conn = pymysql.connect(
+            host=entity.ip,
+            port=int(entity.port),
+            user=entity.user or "",
+            password=entity.password or "",
+            database=database,
+            connect_timeout=5,
+            cursorclass=pymysql.cursors.DictCursor,
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SHOW TABLE STATUS LIKE %s", (table,))
+                row = cur.fetchone() or {}
+                return row
+        finally:
+            conn.close()
+
+    return await asyncio.to_thread(_work)
+
+
+# New: list primary key column names of a table
+async def _list_mysql_primary_columns(entity: Connection, database: str, table: str) -> List[str]:
+    import pymysql
+
+    def _work():
+        conn = pymysql.connect(
+            host=entity.ip,
+            port=int(entity.port),
+            user=entity.user or "",
+            password=entity.password or "",
+            database=database,
+            connect_timeout=5,
+            cursorclass=pymysql.cursors.Cursor,
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f"SHOW INDEX FROM `{table}` WHERE Key_name='PRIMARY'")
+                rows = cur.fetchall() or []
+                cols: List[str] = []
+                for r in rows:
+                    try:
+                        if isinstance(r, (list, tuple)):
+                            # Column_name 通常在索引 4（依版本不同）
+                            # 兜底：挑最后一个字符串字段
+                            val = None
+                            if len(r) >= 5 and isinstance(r[4], str):
+                                val = r[4]
+                            else:
+                                cand = [x for x in r if isinstance(x, str)]
+                                if cand:
+                                    val = cand[-1]
+                            if val:
+                                cols.append(val)
+                        elif isinstance(r, dict) and 'Column_name' in r:
+                            cols.append(str(r['Column_name']))
+                    except Exception:
+                        continue
+                return [c for c in cols if c]
+        finally:
+            conn.close()
+
+    return await asyncio.to_thread(_work)
+
 # 1) /api/ticket/databases?connId=1 (含别名)
 @router.get("/api/ticket/databases", response_model=List[str])
 async def list_databases(
@@ -225,6 +362,136 @@ async def list_columns(
         return await _list_mysql_columns(entity, database, table)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to list columns: {e}")
+
+
+# 6) /api/ticket/indexes?connId=1&db=xxx&table=yyy
+@router.get("/api/ticket/indexes", response_model=List[str])
+async def list_indexes(
+    conn_id_primary: Optional[int] = Query(default=None, alias="connId"),
+    connection_id: Optional[int] = Query(default=None, alias="connectionId"),
+    conn_id_snake: Optional[int] = Query(default=None, alias="conn_id"),
+    id_aliased: Optional[int] = Query(default=None, alias="id"),
+    db_name: Optional[str] = Query(default=None, alias="db"),
+    database_name: Optional[str] = Query(default=None, alias="database"),
+    schema_name: Optional[str] = Query(default=None, alias="schema"),
+    table_name: Optional[str] = Query(default=None, alias="table"),
+    table2_name: Optional[str] = Query(default=None, alias="tableName"),
+    t_name: Optional[str] = Query(default=None, alias="tbl"),
+    db: AsyncSession = Depends(get_db),
+):
+    conn_id = conn_id_primary or connection_id or conn_id_snake or id_aliased
+    if not conn_id:
+        raise HTTPException(status_code=400, detail="connId is required")
+    database = db_name or database_name or schema_name
+    if not database:
+        raise HTTPException(status_code=400, detail="database is required")
+    table = table_name or table2_name or t_name
+    if not table:
+        raise HTTPException(status_code=400, detail="table is required")
+
+    entity = await _get_conn_entity(conn_id, db)
+
+    try:
+        return await _list_mysql_indexes(entity, database, table)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to list indexes: {e}")
+
+
+# 7) /api/ticket/primary-columns?connId=1&db=xxx&table=yyy
+@router.get("/api/ticket/primary-columns", response_model=List[str])
+async def list_primary_columns(
+    conn_id_primary: Optional[int] = Query(default=None, alias="connId"),
+    connection_id: Optional[int] = Query(default=None, alias="connectionId"),
+    conn_id_snake: Optional[int] = Query(default=None, alias="conn_id"),
+    id_aliased: Optional[int] = Query(default=None, alias="id"),
+    db_name: Optional[str] = Query(default=None, alias="db"),
+    database_name: Optional[str] = Query(default=None, alias="database"),
+    schema_name: Optional[str] = Query(default=None, alias="schema"),
+    table_name: Optional[str] = Query(default=None, alias="table"),
+    table2_name: Optional[str] = Query(default=None, alias="tableName"),
+    t_name: Optional[str] = Query(default=None, alias="tbl"),
+    db: AsyncSession = Depends(get_db),
+):
+    conn_id = conn_id_primary or connection_id or conn_id_snake or id_aliased
+    if not conn_id:
+        raise HTTPException(status_code=400, detail="connId is required")
+    database = db_name or database_name or schema_name
+    if not database:
+        raise HTTPException(status_code=400, detail="database is required")
+    table = table_name or table2_name or t_name
+    if not table:
+        raise HTTPException(status_code=400, detail="table is required")
+
+    entity = await _get_conn_entity(conn_id, db)
+
+    try:
+        return await _list_mysql_primary_columns(entity, database, table)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to list primary columns: {e}")
+
+
+# 8) /api/ticket/ddl?connId=1&db=xxx&table=yyy -> str
+@router.get("/api/ticket/ddl", response_model=str)
+async def get_table_ddl(
+    conn_id_primary: Optional[int] = Query(default=None, alias="connId"),
+    connection_id: Optional[int] = Query(default=None, alias="connectionId"),
+    conn_id_snake: Optional[int] = Query(default=None, alias="conn_id"),
+    id_aliased: Optional[int] = Query(default=None, alias="id"),
+    db_name: Optional[str] = Query(default=None, alias="db"),
+    database_name: Optional[str] = Query(default=None, alias="database"),
+    schema_name: Optional[str] = Query(default=None, alias="schema"),
+    table_name: Optional[str] = Query(default=None, alias="table"),
+    table2_name: Optional[str] = Query(default=None, alias="tableName"),
+    t_name: Optional[str] = Query(default=None, alias="tbl"),
+    db: AsyncSession = Depends(get_db),
+):
+    conn_id = conn_id_primary or connection_id or conn_id_snake or id_aliased
+    if not conn_id:
+        raise HTTPException(status_code=400, detail="connId is required")
+    database = db_name or database_name or schema_name
+    if not database:
+        raise HTTPException(status_code=400, detail="database is required")
+    table = table_name or table2_name or t_name
+    if not table:
+        raise HTTPException(status_code=400, detail="table is required")
+
+    entity = await _get_conn_entity(conn_id, db)
+    try:
+        return await _get_mysql_ddl(entity, database, table)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to get ddl: {e}")
+
+
+# 9) /api/ticket/table-status?connId=1&db=xxx&table=yyy -> dict
+@router.get("/api/ticket/table-status")
+async def get_table_status(
+    conn_id_primary: Optional[int] = Query(default=None, alias="connId"),
+    connection_id: Optional[int] = Query(default=None, alias="connectionId"),
+    conn_id_snake: Optional[int] = Query(default=None, alias="conn_id"),
+    id_aliased: Optional[int] = Query(default=None, alias="id"),
+    db_name: Optional[str] = Query(default=None, alias="db"),
+    database_name: Optional[str] = Query(default=None, alias="database"),
+    schema_name: Optional[str] = Query(default=None, alias="schema"),
+    table_name: Optional[str] = Query(default=None, alias="table"),
+    table2_name: Optional[str] = Query(default=None, alias="tableName"),
+    t_name: Optional[str] = Query(default=None, alias="tbl"),
+    db: AsyncSession = Depends(get_db),
+):
+    conn_id = conn_id_primary or connection_id or conn_id_snake or id_aliased
+    if not conn_id:
+        raise HTTPException(status_code=400, detail="connId is required")
+    database = db_name or database_name or schema_name
+    if not database:
+        raise HTTPException(status_code=400, detail="database is required")
+    table = table_name or table2_name or t_name
+    if not table:
+        raise HTTPException(status_code=400, detail="table is required")
+
+    entity = await _get_conn_entity(conn_id, db)
+    try:
+        return await _get_mysql_table_status(entity, database, table)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to get table status: {e}")
 
 
 # ===================== 执行与执行计划 =====================

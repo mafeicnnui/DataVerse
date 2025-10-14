@@ -73,23 +73,43 @@
                         <div class="table-hd">
                           <span class="arrow" :class="{open: isTableOpen(inst.id, db, t)}" @click.stop="toggleTableCats(inst.id, db, t)" aria-hidden="true">›</span>
                           <svg class="ico tbl" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v14H3V5zm2 2v2h14V7H5zm0 4v2h14v-2H5zm0 4v2h14v-2H5z"/></svg>
-                          <span class="label" @click="appendSnip(inst.id, db, t)">{{ t }}</span>
+                          <span class="label" @click.stop="toggleTableCats(inst.id, db, t)">{{ t }}</span>
+                          <div class="inline-actions" aria-label="表操作">
+                            <button class="tb-act" title="新建查询" @click.stop="insertQuickQuery(db, t)">
+                              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm3.92.83H5v-1.92L14.06 6.02l1.92 1.92L6.92 18.08zM20.71 5.63a.996.996 0 0 0 0-1.41L19.78 3.3a.996.996 0 1 0-1.41 1.41l.93.93c.39.39 1.02.39 1.41-.01z"/></svg>
+                            </button>
+                            <button class="tb-act" title="查看对象信息" @click.stop="openInspector(inst.id, db, t)">
+                              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></svg>
+                            </button>
+                          </div>
                         </div>
                         <!-- 每个表的子分类（列/索引/外键/触发器/事件） -->
                         <ul class="table-cats" v-show="isTableOpen(inst.id, db, t)">
-                          <li class="subcat" @click.stop="toggleTableColumns(inst.id, db, t)">
+                          <li class="subcat" @click.stop="(ensurePrimaryColumns(inst.id, db, t), toggleTableColumns(inst.id, db, t))">
                             <svg class="ico col" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2z"/></svg>
                             <span>Columns</span>
                           </li>
                           <ul v-show="isColumnsOpen(inst.id, db, t)" class="columns">
                             <li class="muted" v-if="isColsLoading(inst.id, db, t)">加载中...</li>
-                            <li class="col-name" v-for="c in getColumns(inst.id, db, t)" :key="'c-'+inst.id+'-'+db+'-'+t+'-'+c">{{ c }}</li>
+                            <li class="col-name" v-for="c in getColumns(inst.id, db, t)" :key="'c-'+inst.id+'-'+db+'-'+t+'-'+c">
+                              <svg v-if="isPrimaryKey(inst.id, db, t, c)" class="ico pk" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 14a5 5 0 1 1 3.9 4.9L9 22H7v-2H5v-2H3v-2h4.1A5 5 0 0 1 7 14Zm8-5a3 3 0 1 0-6 0a3 3 0 0 0 6 0Z"/></svg>
+                              <svg v-else class="ico col2" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2z"/></svg>
+                              <span class="name">{{ c }}</span>
+                            </li>
                             <li class="muted" v-if="!isColsLoading(inst.id, db, t) && getColumns(inst.id, db, t).length===0">无列</li>
                           </ul>
-                          <li class="subcat">
+                          <li class="subcat" @click.stop="toggleTableIndexes(inst.id, db, t)">
                             <svg class="ico idx" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z"/></svg>
                             <span>Indexes</span>
                           </li>
+                          <ul v-show="isIndexesOpen(inst.id, db, t)" class="columns">
+                            <li class="muted" v-if="isIdxLoading(inst.id, db, t)">加载中...</li>
+                            <li class="col-name" v-for="ix in getNonPrimaryIndexes(inst.id, db, t)" :key="'i-'+inst.id+'-'+db+'-'+t+'-'+ix">
+                              <svg class="ico idx2" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z"/></svg>
+                              <span class="name">{{ ix }}</span>
+                            </li>
+                            <li class="muted" v-if="!isIdxLoading(inst.id, db, t) && getNonPrimaryIndexes(inst.id, db, t).length===0">无索引</li>
+                          </ul>
                           <li class="subcat">
                             <svg class="ico fk" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 7h10v2H9v6H7V7zm10 6h-4v4h-2v-6h6v2z"/></svg>
                             <span>Foreign Keys</span>
@@ -153,7 +173,7 @@
       </aside>
       <div class="vsplit" @mousedown="startDrag"></div>
       <!-- 右侧：编辑器在上，结果在下（保持与旧页一致的按钮组） -->
-      <main class="right" :style="{ '--left-w': leftWidth + 'px' }" @mousemove="onDragHover">
+      <main class="right" :class="{ 'inspector-on': inspectorVisible }" :style="{ '--left-w': leftWidth + 'px', '--insp-w': inspectorWidth + 'px' }" @mousemove="onDragHover">
         <!-- 浮动库表过滤输入框：允许跨出左侧区域显示在右侧 -->
         <input
           v-if="dbFilterPopup.show"
@@ -167,7 +187,7 @@
           @mouseleave="popupHover = false; if(!dbFilterTextByKey[dbFilterPopup.key]) dbFilterPopup.show=false"
           placeholder="搜索"
         />
-        <div class="tabs">
+        <div class="tabs" style="grid-column:1; grid-row:1; z-index:2;">
           <SqlTabs :ctx="tq" />
           <ConfirmDialog
             :visible="confirmCloseVisible"
@@ -177,8 +197,8 @@
             @cancel="cancelCloseTab"
           />
         </div>
-        <!-- 每个标签的连接/数据库工具条（置于 Tabs 下、编辑器上） -->
-        <div class="tab-toolbar">
+        <!-- 每个标签的连接/数据库工具条（置于 Tabs 下、与对象面板同级） -->
+        <div class="tab-toolbar" style="grid-column:1; grid-row:2; z-index:2;">
           <select class="sel" v-model="activeConnId" :disabled="running" title="实例">
             <option v-for="inst in instances" :key="'sel-inst-'+inst.id" :value="inst.id">
               {{ inst.description || (inst.ip + ':' + inst.port) || ('#' + inst.id) }}
@@ -197,11 +217,11 @@
         </div>
         <!-- 关闭确认：Element 优先，必要时回退到自定义弹窗（以防样式/层级异常） -->
         <!-- 回退用的自定义弹窗先移除，确保优先体验 Element 样式 -->
-        <div class="editor-wrap" ref="editorWrapRef" :style="{ height: editorHeight + 'px', marginTop: '0px' }">
+        <div class="editor-wrap" ref="editorWrapRef" :style="{ height: editorHeight + 'px', marginTop: '0px' }" style="grid-column:1; grid-row:3; z-index:1;">
           <div class="editor" ref="editorRef" :style="{ height: editorHeight + 'px' }"></div>
         </div>
-        <div class="hsplit" @mousedown="startHDrag"></div>
-        <div class="result">
+        <div class="hsplit" @mousedown="startHDrag" style="grid-column:1; grid-row:4;"></div>
+        <div class="result" style="grid-column:1; grid-row:5;">
           <div class="rbody" :class="{ 'table-mode': result && result.type==='table' }">
             <div v-if="result && result.type==='table'" class="table-holder">
               <ResultTable />
@@ -209,10 +229,8 @@
             <pre v-else-if="result && result.type==='text'" class="txt">{{ result.text }}</pre>
             <div v-else class="info muted placeholder">在此显示查询结果或执行信息</div>
           </div>
-          <!-- 底部横向滚动条（与旧页保持一致） -->
-          <div class="x-scroll" ref="xScrollRef" @scroll="onXScroll" v-show="result && result.type==='table'">
-            <div class="spacer" :style="{ width: spacerWidth + 'px', height: '1px' }"></div>
-          </div>
+          <!-- 底部横向滚动条改为使用 ResultTable 内部自带横向滚动，避免把分页顶出视口 -->
+          <div class="x-scroll" ref="xScrollRef" v-if="false"></div>
           <div class="tq-pagination" v-if="result && result.type==='table'">
             <button class="icon-btn" :disabled="page<=1" @click="goToPage(page-1)" title="上一页">‹</button>
             <span class="muted">第</span>
@@ -229,6 +247,25 @@
             <span class="muted">条，共 {{ totalRows || 0 }} 条</span>
           </div>
         </div>
+        <!-- 右侧对象查看器（默认隐藏，网格列2，覆盖编辑器+结果高度） -->
+        <aside class="inspector" :style="{ display: inspectorVisible ? 'flex' : 'none', gridColumn: 2, gridRow: '1 / 6' }">
+          <div class="inspector-hd">
+            <div class="title">{{ inspectorTitle }}</div>
+            <button class="mini" title="关闭" @click="()=>{ inspectorVisible=false }">×</button>
+          </div>
+          <div class="inspector-tabs">
+            <button :class="{active: inspectorTab==='ddl'}" @click="inspectorTab='ddl'">DDL</button>
+            <button :class="{active: inspectorTab==='meta'}" @click="inspectorTab='meta'">元数据</button>
+          </div>
+          <div class="inspector-body" v-if="inspectorTab==='ddl'">
+            <pre class="ddl">{{ inspectorDDL || '加载中...' }}</pre>
+          </div>
+          <div class="inspector-body" v-else>
+            <div class="meta-item" v-for="(v,k) in inspectorMeta" :key="String(k)"><span class="k">{{ k }}</span><span class="v">{{ v }}</span></div>
+          </div>
+        </aside>
+        <!-- 垂直拖动条：用于调整对象查看器宽度（位于两列之间） -->
+        <div v-show="inspectorVisible" class="insp-resizer" title="拖动调整对象窗口宽度" @mousedown="startInspectorResize" style="grid-column:2; grid-row:1 / 6;"></div>
       </main>
     </div>
   </div>
@@ -277,6 +314,92 @@ function colKey(id:any, db:string, tbl:string){ return `${id}::${db}::${tbl}` }
 function isColumnsOpen(id:any, db:string, tbl:string){ return !!openCols[colKey(id,db,tbl)] }
 function isColsLoading(id:any, db:string, tbl:string){ return !!colsLoading[colKey(id,db,tbl)] }
 function getColumns(id:any, db:string, tbl:string){ return colsCache[colKey(id,db,tbl)] || [] }
+// 索引展开/缓存
+const openIdx = reactive<Record<string, boolean>>({})
+const idxCache = reactive<Record<string, string[]>>({})
+const idxLoading = reactive<Record<string, boolean>>({})
+function idxKey(id:any, db:string, tbl:string){ return `${id}::${db}::${tbl}` }
+function isIndexesOpen(id:any, db:string, tbl:string){ return !!openIdx[idxKey(id,db,tbl)] }
+function isIdxLoading(id:any, db:string, tbl:string){ return !!idxLoading[idxKey(id,db,tbl)] }
+function getIndexes(id:any, db:string, tbl:string){ return idxCache[idxKey(id,db,tbl)] || [] }
+async function toggleTableIndexes(id:any, db:string, tbl:string){
+  const k = idxKey(id,db,tbl)
+  openIdx[k] = !openIdx[k]
+  if (openIdx[k] && !(idxCache[k] && idxCache[k].length)) {
+    idxLoading[k] = true
+    try {
+      // 新后端接口：/ticket/indexes 返回索引名数组
+      let names: string[] = []
+      try {
+        const { data } = await api.get('/ticket/indexes', { params: { connId: id, db, database: db, schema: db, table: tbl } })
+        if (Array.isArray(data)) names = data
+        else if (Array.isArray((data as any)?.indexes)) names = (data as any).indexes
+      } catch {}
+      // 若没有接口或失败，回退为空数组（不报错，用户体验更顺滑）
+      idxCache[k] = Array.from(new Set((names || []).map((n:any)=> String(n)).filter(Boolean)))
+    } catch { idxCache[k] = idxCache[k] || [] }
+    finally { idxLoading[k] = false }
+  }
+}
+
+// 主键列缓存
+const pkCache = reactive<Record<string, string[]>>({})
+async function ensurePrimaryColumns(id:any, db:string, tbl:string){
+  const k = idxKey(id,db,tbl)
+  if (pkCache[k]) return
+  try {
+    const { data } = await api.get('/ticket/primary-columns', { params: { connId: id, db, database: db, schema: db, table: tbl } })
+    pkCache[k] = Array.isArray(data) ? data.map((x:any)=>String(x)) : []
+  } catch { pkCache[k] = [] }
+}
+function isPrimaryKey(id:any, db:string, tbl:string, col:string){
+  const k = idxKey(id,db,tbl)
+  const arr = pkCache[k]
+  return Array.isArray(arr) && arr.includes(col)
+}
+// 获取非主键索引名（过滤 PRIMARY）
+function getNonPrimaryIndexes(id:any, db:string, tbl:string){
+  const k = idxKey(id,db,tbl)
+  const arr = idxCache[k] || []
+  return arr.filter(n => String(n).toUpperCase() !== 'PRIMARY')
+}
+
+// 快捷：插入当前表的 SELECT 示例
+function insertQuickQuery(db:string, tbl:string){
+  try {
+    const snip = `-- ${db}.${tbl}\nSELECT * FROM ${db}.${tbl} LIMIT 100;\n`
+    if (cmView) {
+      const doc = cmView.state.doc.toString()
+      const prefix = (doc && !/\n$/.test(doc)) ? '\n' : ''
+      cmView.dispatch({ changes: { from: doc.length, to: doc.length, insert: prefix + snip } })
+      ;(globalThis as any).__next_sql_text = cmView.state.doc.toString()
+      cmView.focus()
+      // 确保编辑器在栅格中的行不被对象面板覆盖
+      try { editorWrapRef.value?.scrollIntoView?.({ block: 'nearest' }) } catch {}
+    }
+  } catch {}
+}
+
+// 打开对象查看器
+const inspectorLast = ref<{ id:any; db:string; tbl:string }|null>(null)
+async function openInspector(id:any, db:string, tbl:string){
+  inspectorVisible.value = true
+  inspectorLast.value = { id, db, tbl }
+  inspectorTab.value = 'ddl'
+  inspectorTitle.value = `${db}.${tbl}`
+  inspectorDDL.value = '加载中...'
+  for (const k in inspectorMeta) delete (inspectorMeta as any)[k]
+  try {
+    const [{ data: ddl }, { data: meta }] = await Promise.all([
+      api.get('/ticket/ddl', { params: { connId: id, db: db, database: db, table: tbl } }),
+      api.get('/ticket/table-status', { params: { connId: id, db: db, database: db, table: tbl } }),
+    ])
+    inspectorDDL.value = typeof ddl === 'string' ? ddl : JSON.stringify(ddl, null, 2)
+    Object.assign(inspectorMeta, meta || {})
+  } catch (e:any) {
+    inspectorDDL.value = e?.response?.data?.detail || e?.message || '加载失败'
+  }
+}
 // 表级展开状态
 const tableOpen = reactive<Record<string, boolean>>({})
 function tableKey(id:any, db:string, tbl:string){ return `${id}::${db}::${tbl}` }
@@ -360,6 +483,27 @@ const editorHeightCommitted = ref(150)
 const toolbarActionsRef = ref<HTMLElement | null>(null)
 let toolbarObserver: MutationObserver | null = null
 let toolbarObservedEl: HTMLElement | null = null
+// 对象查看器状态
+const inspectorVisible = ref(false)
+const inspectorTab = ref<'ddl'|'meta'>('ddl')
+const inspectorDDL = ref('')
+const inspectorMeta = reactive<Record<string, any>>({})
+const inspectorTitle = ref('')
+const inspectorWidth = ref(360)
+function startInspectorResize(e: MouseEvent){
+  const startX = e.clientX
+  const startW = inspectorWidth.value
+  const onMove = (ev: MouseEvent) => {
+    const dx = ev.clientX - startX
+    inspectorWidth.value = Math.max(260, Math.min(800, startW - dx))
+  }
+  const onUp = () => {
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+  }
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp, { once: true })
+}
 let editorResizeObserver: ResizeObserver | null = null
 
 function setupToolbarObserver(){
@@ -435,14 +579,7 @@ function updateSpacerWidth(){
     const finalWidth = Math.max(widthFromDom, widthFromBody, computedCols, 1600)
     spacerWidth.value = finalWidth
     tq.bodyTableWidth = finalWidth
-    // 仅在内容超出时显示底部横向滚动条
-    try {
-      const xs = xScrollRef.value as HTMLElement | null
-      if (xs && body) {
-        const needX = (body.scrollWidth - 1) > body.clientWidth
-        xs.style.display = needX ? 'block' : 'none'
-      }
-    } catch {}
+    // 始终显示底部横向滚动条由 CSS 控制；这里不再强制隐藏
   } catch {
     const fallback = Math.max(tq.bodyTableWidth || 0, 1600)
     spacerWidth.value = fallback
@@ -548,11 +685,11 @@ function syncBodyScroll(targetTop?: number){
 function syncHorizontalScroll(targetLeft?: number){
   try {
     const body = tqBodyRef.value as HTMLElement | null
-    const xs = xScrollRef.value as HTMLElement | null
+    const xs = null as any // 不再同步到外部 x-scroll，使用内部横向滚动条
     const head = tqScrollXRef.value as HTMLElement | null
     const left = typeof targetLeft === 'number' ? targetLeft : Number(body?.scrollLeft || 0)
     if (typeof targetLeft === 'number' && body && body.scrollLeft !== targetLeft) body.scrollLeft = targetLeft
-    if (xs && xs.scrollLeft !== left) xs.scrollLeft = left
+    // 移除 xs 同步
     if (head && head.scrollLeft !== left) head.scrollLeft = left
   } catch {}
 }
@@ -776,6 +913,7 @@ function appendSnip(instId:any, db:string, tbl:string){
  * - 成功后会把"结果与分页状态"写回到当前标签对象，做到"每个标签互不影响"
  */
 async function exec(){
+  const wasInspectorVisible = inspectorVisible.value
   const txtGlobal = (globalThis as any).__next_sql_text
   const sql = (typeof txtGlobal==='string' && txtGlobal.trim()) ? txtGlobal : ''
   if(!sql) return
@@ -825,6 +963,13 @@ async function exec(){
   resetTableScroll()
   updateSpacerWidth()
   await refreshEditorLayout()
+  // 若对象查看器之前已打开，则保持打开；必要时刷新其标题
+  try {
+    if (wasInspectorVisible && inspectorLast.value) {
+      inspectorVisible.value = true
+      inspectorTitle.value = `${inspectorLast.value.db}.${inspectorLast.value.tbl}`
+    }
+  } catch {}
   // 执行后保持 tabs 吸顶与层级，且编辑器紧贴其下，不允许编辑器层级超过 tabs
   try {
     const tabsEl = document.querySelector('.tabs') as HTMLElement | null
@@ -893,15 +1038,7 @@ function goToPage(p:number){ const tp=totalPages.value; const n=Math.min(tp, Mat
 function handlePageJump(){ goToPage(pageInput.value as any) }
 function handlePageSizeChange(e:Event){ const v=Number((e.target as HTMLSelectElement)?.value||pageSize.value); if(!Number.isFinite(v)||v<=0) return; pageSize.value=v; page.value=1; pageInput.value=1; exec() }
 
-function onXScroll(){
-  try {
-    const body = tqBodyRef.value as HTMLElement | null
-    const xs = xScrollRef.value as HTMLElement | null
-    const head = tqScrollXRef.value as HTMLElement | null
-    if (body && xs && body.scrollLeft !== xs.scrollLeft) body.scrollLeft = xs.scrollLeft
-    if (head && xs && head.scrollLeft !== xs.scrollLeft) head.scrollLeft = xs.scrollLeft
-  } catch {}
-}
+function onXScroll(){ /* 保留函数占位，已不使用外部 x-scroll */ }
 
 function ensureActionBarVisible(){
   setupToolbarObserver()
@@ -921,8 +1058,8 @@ function syncEditorScrollerOverflow(){
     const scroller = host.querySelector('.cm-scroller') as HTMLElement | null
     const content = host.querySelector('.cm-content') as HTMLElement | null
     if (!scroller || !content) return
-    const needX = content.scrollWidth > scroller.clientWidth + 1
-    scroller.style.overflowX = needX ? 'auto' : 'hidden'
+    // 启用自动折行后始终隐藏横向滚动
+    scroller.style.overflowX = 'hidden'
     scroller.style.overflowY = 'auto'
   } catch {}
 }
@@ -1165,12 +1302,18 @@ onMounted(()=>{
         lineNumbers(),
         sql({ dialect: MySQL }),
         highlightActiveLine(),
+        // 启用软折行，避免单行无限延伸
+        EditorView.lineWrapping,
         syntaxHighlighting(defaultHighlightStyle),
         keymap.of([
           ...completionKeymap,
           { key: 'Ctrl-Space', run: startCompletion }
         ]),
         autocompletion({ override:[dynamicSQLCompletion], icons:false, defaultKeymap:true, activateOnTyping:true }),
+        // 主题中开启折行
+        EditorView.theme({
+          '.cm-content': { whiteSpace: 'pre-wrap' }
+        }),
         EditorView.updateListener.of((v:any)=>{
           if (v.docChanged) {
             try {
@@ -1201,7 +1344,12 @@ onMounted(()=>{
         })
       ]
     })
-    cmView = new EditorView({ state, parent: host })
+    cmView = new EditorView({
+      state,
+      parent: host,
+      // 强制启用软折行（除样式外再从行为层兜底）
+      extensions: []
+    })
     // 初始标签
     if (!tabs.length) newTab()
     ensureActionBarVisible()
@@ -1250,19 +1398,28 @@ onUpdated(() => {
 .dbs{ list-style:none; margin:0; padding:0 0 0 16px; }
 .cats{ list-style:none; margin:0; padding:4px 0 0 16px; }
 .tbls{ list-style:none; margin:0; padding:2px 0 0 16px; }
-.tbl{ padding:2px 6px; border-radius:4px; cursor:pointer; }
+.tbl{ padding:2px 6px; border-radius:4px; cursor:pointer; position: relative; }
 .tbl:hover{ background:#f1f5f9; }
 .cat{ margin:2px 0; }
 .cat-hd{ display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:4px; cursor:pointer; color:#0f172a; }
 .cat-hd:hover{ background:#eef2ff; }
-.table-hd{ display:flex; align-items:center; gap:6px; padding:2px 0; cursor:pointer; margin-left:2px; }
+.table-hd{ display:flex; align-items:center; gap:6px; padding:2px 0; cursor:pointer; margin-left:2px; position: relative; padding-right:66px; min-height:24px; }
 .table-hd .arrow{ display:inline-block; width:12px; transform: rotate(0deg); transition: transform .12s ease; }
 .table-hd .arrow.open{ transform: rotate(90deg); }
+.table-hd .inline-actions{ position:absolute; right:6px; top:50%; transform: translateY(-50%); display:flex; align-items:center; gap:8px; z-index:3; opacity:0; pointer-events:none; transition: opacity .12s ease; }
+.tbl:hover .inline-actions, .table-hd:hover .inline-actions{ opacity:1; pointer-events:auto; }
+.tb-act{ width:22px; height:22px; border:1px solid #cbd5e1; border-radius:4px; background:#fff; color:#0b57d0; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+.tb-act svg{ width:14px; height:14px; display:block; }
+.table-hd .inline-actions .mini:hover{ background:#e6f0ff; border-color:#93c5fd; }
 .table-cats{ list-style:none; margin:4px 0 8px 28px; padding:0; background:transparent; border:0; }
 .subcat{ display:flex; align-items:center; gap:8px; padding:4px 6px; margin:6px 0; color:#475569; cursor:default; border-radius:6px; }
 .subcat:hover{ background:#f1f5f9; }
 .columns{ list-style:none; margin:6px 0 8px 18px; padding:0; }
-.col-name{ padding:2px 0; color:#111827; }
+.col-name{ display:flex; align-items:center; gap:8px; padding:2px 0; color:#111827; font-size:14px; }
+.col-name .name{ font-size:14px; }
+.ico.pk{ width:14px; height:14px; color:#f59e0b; }
+.ico.col2{ width:14px; height:14px; color:#60a5fa; }
+.ico.idx2{ width:14px; height:14px; color:#60a5fa; }
 .ico.cat-tables,.ico.cat-views,.ico.cat-func,.ico.cat-proc,.ico.cat-evt,.ico.col,.ico.idx,.ico.fk,.ico.trg,.ico.evt{ width:16px; height:16px; }
 .muted{ color:#9ca3af; padding:6px; }
 .panel{ position:absolute; top:0; z-index:1000; border:1px solid #e5e7eb; border-radius:8px; background:#fff; box-shadow:0 8px 16px rgba(0,0,0,.08); }
@@ -1306,7 +1463,8 @@ onUpdated(() => {
 .vsplit{ background:transparent; position:relative; cursor:col-resize; }
 .vsplit::before{ content:""; position:absolute; left:2px; top:0; bottom:0; width:2px; background:#e5e7eb; }
 .vsplit:hover::before{ background:#cbd5e1; }
-.right{ position:relative; display:flex; flex-direction:column; min-height:0; min-width:0; z-index: 0; background:#f8fafc; }
+.right{ position:relative; display:grid; grid-template-columns: 1fr 0; grid-template-rows: auto auto auto 8px 1fr; column-gap: 8px; min-height:0; min-width:0; z-index: 0; background:#f8fafc; }
+.right.inspector-on{ grid-template-columns: 1fr var(--insp-w, 360px); }
 .right > .editor-wrap{ margin-top:0; }
 .toolbar{ display:none; }
 .tabs{ margin:6px 12px 0 12px; min-width:0; overflow:hidden; position: sticky; top: 0; z-index: 10000; background: #f8fafc; border-bottom:1px solid #e5e7eb; min-height: 40px; }
@@ -1343,7 +1501,7 @@ onUpdated(() => {
 .editor-wrap{ position:relative; overflow: visible; flex: 0 0 auto; width:100%; z-index:1; min-height:0; }
 .editor{ height:150px; min-height:0; overflow:hidden; position:relative; }
 .tabs + .editor-wrap { margin-top: 0; }
-.tab-toolbar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid #e5e7eb; background:#f8fafc; position:sticky; top:0; z-index:9; }
+.tab-toolbar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid #e5e7eb; background:#f8fafc; }
 .tab-toolbar .sel { height:28px; padding:0 8px; border:1px solid #c7d2fe; border-radius:6px; color:#0b57d0; }
 .tab-toolbar .sp { flex:1 1 auto; }
 .tab-toolbar .icon-btn{ width:28px; height:28px; border:1px solid #d1d5db; border-radius:6px; background:#fff; color:#374151; display:inline-flex; align-items:center; justify-content:center; }
@@ -1354,9 +1512,9 @@ onUpdated(() => {
 .editor :deep(.cm-editor){ height:100% !important; max-width:100%; position: relative; z-index: 1; }
 .editor :deep(.cm-scroller){ height:100%; overflow:auto; scrollbar-width: thin; padding-right:0; padding-bottom:0; max-width:100%; width: 100%; }
 .editor :deep(.cm-content){
-  white-space: pre;
-  /* 仅在内容超出时触发横向滚动：不再强制比容器更宽 */
-  min-width: 100%;
+  white-space: pre-wrap !important; /* 自动折行 */
+  word-break: break-word;
+  min-width: 0 !important; /* 不撑开容器 */
 }
 .editor :deep(.cm-tooltip){ z-index: 30000; position: absolute; }
 .editor :deep(.cm-tooltip-autocomplete){ z-index: 30010; }
@@ -1370,7 +1528,7 @@ onUpdated(() => {
 .hsplit::before{ content:""; position:absolute; left:0; right:0; top:10px; height:3px; background:#cfd3dc; }
 .fab-actions{ position:absolute; right:12px; top:6px; display:flex; gap:8px; z-index:30; pointer-events:auto; background:#f1f5f9; padding:4px 6px; border-radius:8px; box-shadow:0 6px 16px rgba(15,23,42,0.12); }
 .code{ width:100%; height:100%; padding:10px; border:1px solid #e5e7eb; border-radius:8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:13px; line-height:1.6; outline:none; overflow:auto; white-space: pre-wrap; }
-.result{ display:flex; flex-direction:column; min-height:0; position:relative; z-index:1; background:#f8fafc; }
+.result{ display:flex; flex-direction:column; min-height:0; position:relative; z-index:1; background:#f8fafc; overflow:hidden; }
 .rhdr{ padding:8px 12px; background:#f8fafc; border-bottom:1px solid #e5e7eb; }
 .rbody{ flex:1 1 auto; min-height:0; overflow:auto; padding:12px; scrollbar-width: thin; scrollbar-color:#94a3b8 transparent; background:#f8fafc; position:relative; }
 .rbody.table-mode{ padding:0; }
@@ -1380,7 +1538,8 @@ onUpdated(() => {
 .rbody::-webkit-scrollbar{ width:10px; height:10px }
 .rbody::-webkit-scrollbar-thumb{ background:#94a3b8; border-radius:6px }
 .rbody::-webkit-scrollbar-thumb:hover{ background:#64748b }
-.table-scroll{ overflow-y:auto; overflow-x:clip !important; -ms-overflow-style: none; scrollbar-width: none; }
+/* 结果表内部滚动容器：允许同时出现纵向/横向滚动条 */
+.table-scroll{ overflow:auto; }
 .x-scroll{ flex:0 0 auto; height:12px; min-height:12px; overflow-x:auto; overflow-y:hidden; border-top:1px solid #e5e7eb; background:#fff; }
 .x-scroll{ display: var(--xscroll-visible, block); }
 .x-scroll .spacer{ height:1px; }
@@ -1394,6 +1553,21 @@ onUpdated(() => {
 .tq-pagination .muted{ color:#64748b; }
 .tq-pagination .icon-btn{ width:28px; height:28px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; color:#0b57d0; cursor:pointer; }
 .tq-pagination .icon-btn:hover{ background:#f8fafc; }
+
+.inspector{ border-left:1px solid #e5e7eb; background:#fff; display:flex; flex-direction:column; align-self:start; position: sticky; top: 0; height: calc(100vh - 0px); overflow: auto; }
+.insp-resizer{ cursor: col-resize; width: 6px; margin-left: -3px; background: transparent; position: sticky; top: 0; height: 100vh; align-self:start; }
+.insp-resizer:hover{ background: rgba(59,130,246,.2); }
+.inspector-hd{ display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #e5e7eb; }
+.inspector-hd .title{ font-weight:600; color:#0f172a; }
+.inspector-hd .mini{ width:24px; height:24px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; }
+.inspector-tabs{ display:flex; gap:6px; padding:0 10px 6px 10px; border-bottom:1px solid #e5e7eb; position: sticky; top: 0; background:#fff; z-index:1; }
+.inspector-tabs button{ height:28px; padding:0 10px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; cursor:pointer; }
+.inspector-tabs button.active{ background:#e6f0ff; border-color:#93c5fd; color:#0b57d0; }
+.inspector-body{ padding:10px; overflow:auto; }
+.inspector-body .ddl{ white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px; line-height: 1.5; }
+.meta-item{ display:flex; gap:8px; padding:4px 0; font-size:13px; }
+.meta-item .k{ color:#64748b; min-width:140px; }
+.meta-item .v{ color:#0f172a; }
 .tq-pagination input[type="number"]{ height:28px; line-height:28px; border:1px solid #e5e7eb; border-radius:8px; padding:2px 8px; box-sizing:border-box; color:#111827; }
 .tq-pagination select{ height:28px; border:1px solid #e5e7eb; border-radius:8px; padding:2px 28px 2px 8px; color:#111827; }
 /* 结果区占位提示：字体更小、更淡，便于与编辑区区分 */
