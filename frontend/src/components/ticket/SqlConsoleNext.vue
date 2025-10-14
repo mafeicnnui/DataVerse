@@ -60,7 +60,7 @@
                   <input v-if="dbFilterVisibleKey==='__inline__never__'" class="db-filter-input" />
                 </div>
                 <ul v-show="expandDbByConn[inst.id]?.[db]" class="tbls">
-                  <li class="tbl" v-for="t in filteredTablesForDisplay(inst.id, db)" :key="'t-'+inst.id+'-'+db+'-'+t" @click="appendSnip(db, t)">
+                  <li class="tbl" v-for="t in filteredTablesForDisplay(inst.id, db)" :key="'t-'+inst.id+'-'+db+'-'+t" @click="appendSnip(inst.id, db, t)">
                     <svg class="ico tbl" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v14H3V5zm2 2v2h14V7H5zm0 4v2h14v-2H5zm0 4v2h14v-2H5z"/></svg>
                     {{ t }}
                   </li>
@@ -105,6 +105,24 @@
             @confirm="performCloseTab"
             @cancel="cancelCloseTab"
           />
+        </div>
+        <!-- 每个标签的连接/数据库工具条（置于 Tabs 下、编辑器上） -->
+        <div class="tab-toolbar">
+          <select class="sel" v-model="activeConnId" :disabled="running" title="实例">
+            <option v-for="inst in instances" :key="'sel-inst-'+inst.id" :value="inst.id">
+              {{ inst.description || (inst.ip + ':' + inst.port) || ('#' + inst.id) }}
+            </option>
+          </select>
+          <select class="sel" v-model="activeDatabase" :disabled="running" title="数据库">
+            <option value="">选择数据库</option>
+            <option v-for="db in (dbsByConn[activeConnId]||[])" :key="'sel-db-'+activeConnId+'-'+db" :value="db">{{ db }}</option>
+          </select>
+          <button class="icon-btn add" :disabled="running" @click="exec" title="执行"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+          <button class="icon-btn warn" :disabled="!running" @click="stop" title="停止"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg></button>
+          <button class="icon-btn" :disabled="running" @click="viewPlan" title="执行计划"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zM3 9h2V7H3v2zm4 8h2v-6H7v6zm4 0h2V5h-2v12zm4 0h2v-8h-2v8zm4 0h2v-4h-2v4z"/></svg></button>
+          <button class="icon-btn info" :disabled="running" @click="beautify" title="格式化"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/></svg></button>
+          <button class="icon-btn" :disabled="running" @click="exportCSV" title="导出 CSV"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5v5h5v4zm-8.5 4.5H8l-1-1-1 1H4.5l2-2-2-2H6l1 1 1-1h1.5l-2 2 2 2zm3.5.5c-1.1 0-2-.9-2-2h1.5a.5.5 0 1 0 1 0c0-.3-.2-.5-.6-.7l-.4-.1c-1-.3-1.5-.9-1.5-1.7 0-1.1.9-2 2-2s2 .9 2 2h-1.5a.5.5 0 1 0-1 0c0 .2.2 .4 .6 .6l.4 .1c1 .3 1.5 1 1.5 1.8 0 1.1-.9 2-2 2zm4 .5-1.8-5H16l2 6h1l2-6h-1.2L18.5 18z"/></svg></button>
+          <button class="icon-btn" :disabled="running" @click="exportExcel" title="导出 Excel"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 2H8a2 2 0 0 0-2 2v3h2V4h11v16H8v-3H6v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM5 7H3l3.5 5L3 17h2l2-3.6L10 17h2L8.5 12 12 7H10L7.5 10.6 5 7z"/></svg></button>
         </div>
         <!-- 关闭确认：Element 优先，必要时回退到自定义弹窗（以防样式/层级异常） -->
         <!-- 回退用的自定义弹窗先移除，确保优先体验 Element 样式 -->
@@ -198,6 +216,39 @@ const running = ref(false)
 let currentAbort: AbortController | null = null
 const result = ref<any|null>(null)
 const currentDb = ref('')
+// 每标签的上下文：连接与数据库
+type TabCtx = { connId: any; database: string }
+const tabCtx = reactive<Record<string, TabCtx>>({})
+// 活动标签对应的下拉值（双向绑定）
+const activeConnId = computed({
+  get(){
+    const t = tabs.find(x=>x.id===activeTab.value)
+    const ctx = t ? tabCtx[t.id] : null
+    return ctx ? ctx.connId : (connId.value as any)
+  },
+  set(v:any){
+    const t = tabs.find(x=>x.id===activeTab.value)
+    if (!t) return
+    if (!tabCtx[t.id]) tabCtx[t.id] = { connId: v, database: '' }
+    else tabCtx[t.id].connId = v
+    // 动态加载对应实例的数据库
+    loadDatabasesByConn(v)
+  }
+})
+const activeDatabase = computed({
+  get(){
+    const t = tabs.find(x=>x.id===activeTab.value)
+    const ctx = t ? tabCtx[t.id] : null
+    return ctx ? ctx.database : (currentDb.value || '')
+  },
+  set(v:string){
+    const t = tabs.find(x=>x.id===activeTab.value)
+    if (!t) return
+    if (!tabCtx[t.id]) tabCtx[t.id] = { connId: activeConnId.value, database: v }
+    else tabCtx[t.id].database = v
+    currentDb.value = v
+  }
+})
 const editorHeight = ref(150)
 const editorHeightCommitted = ref(150)
 const toolbarActionsRef = ref<HTMLElement | null>(null)
@@ -591,8 +642,17 @@ function onDragHover(ev: MouseEvent){
   } catch {}
 }
 
-function appendSnip(db:string, tbl:string){
+function appendSnip(instId:any, db:string, tbl:string){
   currentDb.value = db
+  // 将点击来源的实例/数据库保存到当前标签上下文
+  try {
+    const t = tabs.find(x=>x.id===activeTab.value)
+    if (t) {
+      tabCtx[t.id] = { connId: instId, database: db }
+      // 确保数据库下拉可选
+      if (!dbsByConn[instId]) loadDatabasesByConn(instId)
+    }
+  } catch {}
   const snip = `-- ${db}.${tbl}\nSELECT * FROM ${db}.${tbl} LIMIT 100;\n`
   try {
     if (cmView) {
@@ -622,9 +682,13 @@ async function exec(){
   try { if (currentAbort) currentAbort.abort() } catch {}
   currentAbort = new AbortController()
   try{
-    const payload:any = { connId: connId.value, sql, page: page.value, pageSize: pageSize.value }
+    // 使用每个标签独立的连接/数据库上下文
+    const ctx = tabs.find(t=>t.id===activeTab.value) ? tabCtx[activeTab.value] : null
+    const useConn = ctx?.connId ?? connId.value
+    const useDb = ctx?.database || currentDb.value
+    const payload:any = { connId: useConn, sql, page: page.value, pageSize: pageSize.value }
     try { if (/\blimit\b/i.test(sql)) payload.respectInnerLimit = true } catch {}
-    if (currentDb.value) payload.database = currentDb.value
+    if (useDb) payload.database = useDb
     const {data}=await api.post('/ticket/execute', payload, { signal: (currentAbort as any)?.signal })
     if (data && Array.isArray(data.data) && Array.isArray(data.columns)) {
       result.value={ type:'table', data:data.data, columns:data.columns }
@@ -752,6 +816,8 @@ function newTab(){
   const t:Tab = { id: String(Date.now()) + '-' + n, title: `SQL ${n}`, text: '', result: null, page: 1, pageSize: 50, totalRows: 0 }
   tabs.push(t)
   activeTab.value = t.id
+  // 初始化标签上下文为当前页面的连接与数据库
+  tabCtx[t.id] = { connId: connId.value, database: currentDb.value || '' }
   if (cmView) {
     cmView.dispatch({ changes:{ from:0, to: cmView.state.doc.length, insert: '' } })
     ;(globalThis as any).__next_sql_text = ''
@@ -790,6 +856,15 @@ function switchTab(id:string){
   pageInput.value = page.value
   pageSize.value = Number(t.pageSize || 50)
   totalRows.value = Number(t.totalRows || 0)
+  // 恢复该标签的连接/数据库
+  try{
+    const ctx = tabCtx[t.id]
+    if (ctx) {
+      // 触发计算属性 get 即可；需要时加载数据库
+      if (ctx.connId && !dbsByConn[ctx.connId]) loadDatabasesByConn(ctx.connId)
+      currentDb.value = ctx.database || ''
+    }
+  }catch{}
   // 刷新表格宽度与滚动
   refreshEditorLayout(); ensureActionBarVisible(); setTimeout(() => { computeColWidths(); resetTableScroll(); updateSpacerWidth(); ensureActionBarVisible(); try{ cmView && cmView.focus() }catch{}; }, 0)
 }
@@ -1112,6 +1187,14 @@ onUpdated(() => {
 .editor-wrap{ position:relative; overflow: visible; flex: 0 0 auto; width:100%; z-index:1; min-height:0; }
 .editor{ height:150px; min-height:0; overflow:hidden; position:relative; }
 .tabs + .editor-wrap { margin-top: 0; }
+.tab-toolbar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid #e5e7eb; background:#f8fafc; position:sticky; top:0; z-index:9; }
+.tab-toolbar .sel { height:28px; padding:0 8px; border:1px solid #c7d2fe; border-radius:6px; color:#0b57d0; }
+.tab-toolbar .sp { flex:1 1 auto; }
+.tab-toolbar .icon-btn{ width:28px; height:28px; border:1px solid #d1d5db; border-radius:6px; background:#fff; color:#374151; display:inline-flex; align-items:center; justify-content:center; }
+.tab-toolbar .icon-btn.add{ background:#0b57d0; border-color:#0b57d0; color:#fff; }
+.tab-toolbar .icon-btn.warn{ background:#fff1f2; border-color:#fecaca; color:#b91c1c; }
+.tab-toolbar .icon-btn.info{ background:#e6f0ff; border-color:#c7d2fe; color:#0b57d0; }
+.tab-toolbar .icon-btn svg{ width:16px; height:16px; }
 .editor :deep(.cm-editor){ height:100% !important; max-width:100%; position: relative; z-index: 1; }
 .editor :deep(.cm-scroller){ height:100%; overflow:auto; scrollbar-width: thin; padding-right:0; padding-bottom:0; max-width:100%; width: 100%; }
 .editor :deep(.cm-content){
