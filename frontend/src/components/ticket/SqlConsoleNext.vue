@@ -743,8 +743,44 @@ function stop(){
   ensureActionBarVisible()
   setTimeout(() => ensureActionBarVisible(), 0)
 }
-function viewPlan(){ /* 保留占位，与旧页一致 */ }
-function beautify(){ try{ if(!cmView) return; let s=cmView.state.doc.toString(); s=s.replace(/[\t ]+/g,' ').replace(/\s*;\s*/g,';\n').replace(/\n{3,}/g,'\n\n').trim()+'\n'; cmView.dispatch({ changes:{ from:0, to: cmView.state.doc.length, insert: s } }); (globalThis as any).__next_sql_text = s }catch{} }
+async function viewPlan(){
+  try {
+    const txtGlobal = (globalThis as any).__next_sql_text
+    const sqlText = (typeof txtGlobal==='string' ? txtGlobal : cmView?.state?.doc?.toString() || '') || ''
+    if (!sqlText.trim()) return
+    // 使用每个标签的连接/数据库上下文
+    const ctx = tabs.find(t=>t.id===activeTab.value) ? tabCtx[activeTab.value] : null
+    const useConn = ctx?.connId ?? connId.value
+    const useDb = ctx?.database || currentDb.value || ''
+    result.value = { type: 'text', text: '生成执行计划中...' }
+    const { data } = await api.post('/ticket/plan', { connId: useConn, database: useDb, sql: sqlText })
+    if (typeof data === 'string') {
+      result.value = { type: 'text', text: data }
+    } else if (data && data.message) {
+      result.value = { type: 'text', text: data.message }
+    } else {
+      result.value = { type: 'text', text: JSON.stringify(data, null, 2) }
+    }
+    const t = tabs.find(x=>x.id===activeTab.value); if (t) t.result = result.value
+  } catch (e:any) {
+    const msg = e?.response?.data?.detail || e?.message || '获取执行计划失败'
+    result.value = { type: 'text', text: String(msg) }
+    const t = tabs.find(x=>x.id===activeTab.value); if (t) t.result = result.value
+  }
+}
+function beautify(){
+  try{
+    if(!cmView) return
+    let s = cmView.state.doc.toString()
+    s = s.replace(/[\t ]+/g,' ').replace(/\s*;\s*/g,';\n').replace(/\n{3,}/g,'\n\n').trim()+'\n'
+    cmView.dispatch({ changes:{ from:0, to: cmView.state.doc.length, insert: s } })
+    ;(globalThis as any).__next_sql_text = s
+    // 同步到当前标签文本
+    const t = tabs.find(x=>x.id===activeTab.value)
+    if (t) { t.text = s; t.dirty = true }
+    try { cmView.focus() } catch {}
+  }catch{}
+}
 
 // 保留分页工具函数
 function goToPage(p:number){ const tp=totalPages.value; const n=Math.min(tp, Math.max(1, Number(p)||1)); if(n===page.value) return; page.value=n; pageInput.value=n; exec() }
