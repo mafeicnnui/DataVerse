@@ -1,14 +1,37 @@
 <template>
   <div class="sql-next">
     <header class="hdr">
-      <div class="title">SQL控制台（Next）</div>
-      <div class="hdr-actions sticky" ref="toolbarActionsRef">
-        <button class="icon-btn add" :disabled="running" @click="exec" title="执行"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
-        <button class="icon-btn warn" :disabled="!running" @click="stop" title="停止"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg></button>
-        <button class="icon-btn info" :disabled="running" @click="beautify" title="格式化"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/></svg></button>
-        <button class="icon-btn" :disabled="running" @click="viewPlan" title="执行计划"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zM3 9h2V7H3v2zm4 8h2v-6H7v6zm4 0h2V5h-2v12zm4 0h2v-8h-2v8zm4 0h2v-4h-2v4z"/></svg></button>
-        <button class="icon-btn" :disabled="running" @click="exportCSV" title="导出 CSV"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5v5h5v4zm-8.5 4.5H8l-1-1-1 1H4.5l2-2-2-2H6l1 1 1-1h1.5l-2 2 2 2zm3.5.5c-1.1 0-2-.9-2-2h1.5a.5.5 0 1 0 1 0c0-.3-.2-.5-.6-.7l-.4-.1c-1-.3-1.5-.9-1.5-1.7 0-1.1.9-2 2-2s2 .9 2 2h-1.5a.5.5 0 1 0-1 0c0 .2.2 .4 .6 .6l.4 .1c1 .3 1.5 1 1.5 1.8 0 1.1-.9 2-2 2zm4 .5-1.8-5H16l2 6h1l2-6h-1.2L18.5 18z"/></svg></button>
-        <button class="icon-btn" :disabled="running" @click="exportExcel" title="导出 Excel"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 2H8a2 2 0 0 0-2 2v3h2V4h11v16H8v-3H6v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM5 7H3l3.5 5L3 17h2l2-3.6L10 17h2L8.5 12 12 7H10L7.5 10.6 5 7z"/></svg></button>
+      <img class="brand" src="/dataverse_logo.png" alt="logo" />
+      <div class="title">星域SQL控制台</div>
+      <div class="big-actions" style="margin-left:auto">
+        <button class="big-btn" title="新建查询" @click="newTab()">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13H13v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+          <span>新建查询</span>
+        </button>
+        <button class="big-btn" title="表" @click="openObjectTab('tables')">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h16v4H4V5zm0 5h16v4H4v-4zm0 5h16v4H4v-4z"/></svg>
+          <span>表</span>
+        </button>
+        <button class="big-btn" title="视图" @click="openObjectTab('views')">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 5C5 5 2 12 2 12s3 7 10 7 10-7 10-7-3-7-10-7zm0 2a5 5 0 110 10 5 5 0 010-10z"/></svg>
+          <span>视图</span>
+        </button>
+        <button class="big-btn" title="函数" @click="openObjectTab('functions')">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v2H9v5h4a4 4 0 110 8H7v-2h6a2 2 0 100-4H7V4z"/></svg>
+          <span>函数</span>
+        </button>
+        <button class="big-btn" title="过程" @click="openObjectTab('procedures')">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16v4H4V4zm0 6h10v4H4v-4zm0 6h16v4H4v-4z"/></svg>
+          <span>过程</span>
+        </button>
+        <button class="big-btn" title="事件" @click="openObjectTab('events')">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v2H5a2 2 0 00-2 2v12a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2h-2V2h-2v2H9V2H7zm12 6H5v10h14V8z"/></svg>
+          <span>事件</span>
+        </button>
+        <button class="big-btn" title="触发器" @click="openObjectTab('triggers')">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 20l8-4 8 4-8-18z"/></svg>
+          <span>触发器</span>
+        </button>
       </div>
     </header>
     <div class="layout" :style="{ '--left-w': leftWidth + 'px' }">
@@ -217,11 +240,12 @@
         </div>
         <!-- 关闭确认：Element 优先，必要时回退到自定义弹窗（以防样式/层级异常） -->
         <!-- 回退用的自定义弹窗先移除，确保优先体验 Element 样式 -->
-        <div class="editor-wrap" ref="editorWrapRef" :style="{ height: editorHeight + 'px', marginTop: '0px' }" style="grid-column:1; grid-row:3; z-index:1;">
+        <!-- 头部已放置大图标，这里移除重复渲染 -->
+        <div v-show="!isObjectActive" class="editor-wrap" ref="editorWrapRef" :style="{ height: editorHeight + 'px', marginTop: '0px' }" style="grid-column:1; grid-row:3; z-index:1;">
           <div class="editor" ref="editorRef" :style="{ height: editorHeight + 'px' }"></div>
         </div>
-        <div class="hsplit" @mousedown="startHDrag" style="grid-column:1; grid-row:4;"></div>
-        <div class="result" style="grid-column:1; grid-row:5;">
+        <div v-show="!isObjectActive" class="hsplit" @mousedown="startHDrag" style="grid-column:1; grid-row:4;"></div>
+        <div v-show="!isObjectActive" class="result" style="grid-column:1; grid-row:5;">
           <div class="rbody" :class="{ 'table-mode': result && result.type==='table' }">
             <div v-if="result && result.type==='table'" class="table-holder">
               <ResultTable />
@@ -229,7 +253,7 @@
             <pre v-else-if="result && result.type==='text'" class="txt">{{ result.text }}</pre>
             <div v-else class="info muted placeholder">在此显示查询结果或执行信息</div>
           </div>
-          <!-- 底部横向滚动条改为使用 ResultTable 内部自带横向滚动，避免把分页顶出视口 -->
+          <!-- 底部横向滚动条改为使用 ResultTable 内部自带横向滚动 -->
           <div class="x-scroll" ref="xScrollRef" v-if="false"></div>
           <div class="tq-pagination" v-if="result && result.type==='table'">
             <button class="icon-btn" :disabled="page<=1" @click="goToPage(page-1)" title="上一页">‹</button>
@@ -245,6 +269,47 @@
               <option :value="100">100</option>
             </select>
             <span class="muted">条，共 {{ totalRows || 0 }} 条</span>
+          </div>
+        </div>
+        <!-- 对象浏览视图（表/视图/函数等）：占用编辑器+结果区域 -->
+        <div v-show="isObjectActive" class="object-view" style="grid-column:1; grid-row:3 / 6;">
+          <div class="ov-toolbar">
+            <div class="title">{{ objectTabTitle }}</div>
+            <div class="sp"></div>
+            <input class="ov-search" v-model.trim="objectSearch" placeholder="搜索对象" />
+          </div>
+          <div class="ov-body">
+            <div class="ov-list">
+              <div
+                v-for="name in filteredObjectList"
+                :key="name"
+                class="ov-item"
+                :class="{active: name===objectSelected}"
+                @click="selectObject(name)"
+              >
+                <span class="name">{{ name }}</span>
+              </div>
+              <div v-if="!objectLoading && filteredObjectList.length===0" class="muted" style="padding:8px">无对象</div>
+              <div v-if="objectLoading" class="muted" style="padding:8px">加载中...</div>
+            </div>
+            <div class="ov-detail">
+              <div class="ov-tabs">
+                <button :class="{active: ovTab==='ddl'}" @click="ovTab='ddl'">DDL</button>
+                <button :class="{active: ovTab==='meta'}" @click="ovTab='meta'">元数据</button>
+              </div>
+              <div class="ov-panel" v-if="ovTab==='ddl'">
+                <pre class="ddl">{{ ovDDL || (objectSelected ? '加载中...' : '请选择对象') }}</pre>
+              </div>
+              <div class="ov-panel" v-else>
+                <div v-if="!objectSelected" class="muted" style="padding:8px">请选择对象</div>
+                <div v-else class="meta">
+                  <div class="row" v-for="(v,k) in ovMeta" :key="String(k)">
+                    <span class="k">{{ k }}</span>
+                    <span class="v">{{ v }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <!-- 右侧对象查看器（默认隐藏，网格列2，覆盖编辑器+结果高度） -->
@@ -490,6 +555,71 @@ const inspectorDDL = ref('')
 const inspectorMeta = reactive<Record<string, any>>({})
 const inspectorTitle = ref('')
 const inspectorWidth = ref(360)
+// 对象视图状态
+const objectMode = ref<'none'|'tables'|'views'|'functions'|'procedures'|'events'|'triggers'>('none')
+const isObjectActive = computed(()=> objectMode.value !== 'none')
+const objectTabTitle = computed(()=>{
+  const map:any = { tables:'对象：表', views:'对象：视图', functions:'对象：函数', procedures:'对象：过程', events:'对象：事件', triggers:'对象：触发器' }
+  return map[objectMode.value] || '对象'
+})
+const objectList = ref<string[]>([])
+const objectLoading = ref(false)
+const objectSelected = ref('')
+const objectSearch = ref('')
+const ovTab = ref<'ddl'|'meta'>('ddl')
+const ovDDL = ref('')
+const ovMeta = reactive<Record<string, any>>({})
+
+function filtered(list:string[]): string[] { const q=(objectSearch.value||'').trim().toLowerCase(); if(!q) return list; return list.filter(n=>String(n).toLowerCase().includes(q)) }
+const filteredObjectList = computed(()=> filtered(objectList.value))
+
+async function openObjectTab(kind: typeof objectMode.value){
+  objectMode.value = kind
+  ovTab.value = 'ddl'
+  objectSelected.value = ''
+  ovDDL.value = ''
+  for (const k in ovMeta) delete (ovMeta as any)[k]
+  await loadObjectList()
+}
+
+async function loadObjectList(){
+  objectLoading.value = true
+  objectList.value = []
+  try{
+    const db = activeDatabase.value || currentDb.value || ''
+    if (!db) { objectLoading.value=false; return }
+    if (objectMode.value==='tables'){
+      // 复用已有接口
+      try{
+        const {data}=await api.get(`/connections/${activeConnId.value}/databases/${encodeURIComponent(db)}/tables`)
+        objectList.value = Array.isArray(data)?data:[]
+      }catch{
+        const {data}=await api.get('/ticket/tables', { params: { connId: activeConnId.value, database: db, db, schema: db } })
+        objectList.value = Array.isArray(data)?data:[]
+      }
+    } else {
+      // 其他对象后续扩展，这里先置空
+      objectList.value = []
+    }
+  }catch{ objectList.value=[] }
+  finally{ objectLoading.value=false }
+}
+
+async function selectObject(name:string){
+  objectSelected.value = name
+  ovTab.value = 'ddl'
+  ovDDL.value = '加载中...'
+  for (const k in ovMeta) delete (ovMeta as any)[k]
+  try{
+    const db = activeDatabase.value || currentDb.value || ''
+    const [{data: ddl}, {data: meta}] = await Promise.all([
+      api.get('/ticket/ddl', { params: { connId: activeConnId.value, database: db, db, table: name } }),
+      api.get('/ticket/table-status', { params: { connId: activeConnId.value, database: db, db, table: name } })
+    ])
+    ovDDL.value = typeof ddl==='string'?ddl:JSON.stringify(ddl,null,2)
+    Object.assign(ovMeta, meta||{})
+  }catch(e:any){ ovDDL.value = e?.response?.data?.detail || e?.message || '加载失败' }
+}
 function startInspectorResize(e: MouseEvent){
   const startX = e.clientX
   const startW = inspectorWidth.value
@@ -1375,6 +1505,12 @@ onUpdated(() => {
 .sql-next { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 .hdr { display:flex; align-items:center; gap:10px; padding:10px 12px; background: linear-gradient(90deg,#e8f0fe,#dbe8ff); border-bottom:1px solid #c7d2fe; color:#0b57d0; }
 .hdr .title{ font-weight:700; }
+.hdr .brand{ width:22px; height:22px; object-fit:contain; }
+.big-actions{ display:flex; gap:10px; margin-left:16px; }
+.big-btn{ display:flex; flex-direction:column; align-items:center; justify-content:center; width:64px; height:56px; border:1px solid #c7d2fe; border-radius:10px; background:#fff; color:#0b57d0; cursor:pointer; }
+.big-btn svg{ width:24px; height:24px; }
+.big-btn span{ font-size:12px; margin-top:4px; }
+.big-btn:hover{ background:#eef2ff; }
 .layout { flex:1 1 auto; min-height:0; display:grid; grid-template-columns: var(--left-w,270px) 6px 1fr; overflow:hidden; width:100%; }
 .left { background:#f8fafc; border-right:1px solid #e5e7eb; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
 .tree { flex:1 1 auto; min-height:0; overflow-y:auto !important; overflow-x:hidden; padding:6px; }
@@ -1577,5 +1713,26 @@ onUpdated(() => {
 .db-filter-float:focus{ border-color:#93c5fd; box-shadow:0 0 0 2px rgba(147,197,253,.35); }
 /* 移除自绘补全面板样式，使用 CodeMirror 自带面板 */
 .no-select, .no-select *{ -webkit-user-select: none !important; user-select: none !important; }
+/* 对象视图样式 */
+.object-view{ display:flex; flex-direction:column; min-height:0; background:#fff; border-top:1px solid #e5e7eb; }
+.object-view .ov-toolbar{ display:flex; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid #e5e7eb; background:#f8fafc; }
+.object-view .ov-toolbar .title{ font-weight:600; color:#0f172a; }
+.object-view .ov-toolbar .sp{ flex:1 1 auto; }
+.object-view .ov-toolbar .ov-search{ height:28px; border:1px solid #c7d2fe; border-radius:6px; padding:0 8px; }
+.object-view .ov-body{ flex:1 1 auto; min-height:0; display:grid; grid-template-columns: 300px 1fr; }
+.object-view .ov-list{ border-right:1px solid #e5e7eb; overflow:auto; }
+.object-view .ov-item{ display:flex; align-items:center; padding:6px 10px; cursor:pointer; }
+.object-view .ov-item:hover{ background:#eef2ff; }
+.object-view .ov-item.active{ background:#e6f0ff; }
+.object-view .ov-item .name{ white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
+.object-view .ov-detail{ overflow:auto; display:flex; flex-direction:column; }
+.object-view .ov-tabs{ display:flex; gap:6px; padding:6px 10px; border-bottom:1px solid #e5e7eb; position:sticky; top:0; background:#fff; }
+.object-view .ov-tabs button{ height:28px; padding:0 10px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; cursor:pointer; }
+.object-view .ov-tabs button.active{ background:#e6f0ff; border-color:#93c5fd; color:#0b57d0; }
+.object-view .ov-panel{ padding:10px; overflow:auto; }
+.object-view .ov-panel .ddl{ white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px; line-height: 1.5; }
+.object-view .meta .row{ display:flex; gap:8px; padding:4px 0; font-size:13px; }
+.object-view .meta .k{ color:#64748b; min-width:140px; }
+.object-view .meta .v{ color:#0f172a; }
 </style>
 
