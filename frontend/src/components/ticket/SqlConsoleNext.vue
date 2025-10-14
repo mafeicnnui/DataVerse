@@ -1142,9 +1142,10 @@ onUpdated(() => {
 .rbody::-webkit-scrollbar-thumb{ background:#94a3b8; border-radius:6px }
 .rbody::-webkit-scrollbar-thumb:hover{ background:#64748b }
 .table-scroll{ overflow-y:auto; overflow-x:clip !important; -ms-overflow-style: none; scrollbar-width: none; }
-.x-scroll{ flex:0 0 auto; height:16px; min-height:16px; overflow-x:auto; overflow-y:hidden; border-top:1px solid #e5e7eb; background:#f8fafc; }
+.x-scroll{ flex:0 0 auto; height:12px; min-height:12px; overflow-x:auto; overflow-y:hidden; border-top:1px solid #e5e7eb; background:#fff; }
 .x-scroll{ display: var(--xscroll-visible, block); }
 .x-scroll .spacer{ height:1px; }
+/* 横向滚动条外观：与旧版一致（细拇指、圆角、浅灰） */
 .x-scroll{ scrollbar-width: thin; scrollbar-color:#94a3b8 transparent; }
 .x-scroll::-webkit-scrollbar{ height:10px; }
 .x-scroll::-webkit-scrollbar-track{ background:transparent; }
