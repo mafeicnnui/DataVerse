@@ -318,13 +318,17 @@
         </div>
         <!-- 右侧对象查看器（默认隐藏，网格列2，覆盖编辑器+结果高度） -->
         <aside class="inspector" :style="{ display: inspectorVisible ? 'flex' : 'none', gridColumn: 2, gridRow: '1 / 6' }">
-          <div class="inspector-hd">
-            <div class="title">{{ inspectorTitle }}</div>
-            <button class="mini" title="关闭" @click="()=>{ inspectorVisible=false }">×</button>
-          </div>
           <div class="inspector-tabs">
-            <button :class="{active: inspectorTab==='ddl'}" @click="inspectorTab='ddl'">DDL</button>
-            <button :class="{active: inspectorTab==='meta'}" @click="inspectorTab='meta'">元数据</button>
+            <button class="icon-btn" :class="{active: inspectorTab==='ddl'}" title="DDL（结构）" @click="inspectorTab='ddl'">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h16v2H4V5zm0 6h16v2H4v-2zm0 6h10v2H4v-2z"/></svg>
+            </button>
+            <button class="icon-btn" :class="{active: inspectorTab==='meta'}" title="元数据" @click="inspectorTab='meta'">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h14v2H7V5zm0 6h14v2H7v-2zm0 6h14v2H7v-2zM3 5h2v2H3V5zm0 6h2v2H3v-2zm0 6h2v2H3v-2z"/></svg>
+            </button>
+            <div class="sp"></div>
+            <button class="icon-btn close" title="关闭" @click="()=>{ inspectorVisible=false }">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.3 5.71 12 12.01l-6.3-6.3-1.4 1.41 6.29 6.29-6.29 6.3 1.4 1.41 6.3-6.3 6.29 6.3 1.41-1.41-6.3-6.3 6.3-6.29z"/></svg>
+            </button>
           </div>
           <div class="inspector-body" v-if="inspectorTab==='ddl'">
             <div v-if="!inspectorDDL" class="ddl muted">加载中...</div>
@@ -1737,12 +1741,13 @@ onUpdated(() => {
 .inspector{ border-left:1px solid #e5e7eb; background:#fff; display:flex; flex-direction:column; align-self:start; position: sticky; top: 0; height: calc(100vh - 0px); overflow: auto; }
 .insp-resizer{ cursor: col-resize; width: 6px; margin-left: -3px; background: transparent; position: sticky; top: 0; height: 100vh; align-self:start; }
 .insp-resizer:hover{ background: rgba(59,130,246,.2); }
-.inspector-hd{ display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-bottom:1px solid #e5e7eb; }
-.inspector-hd .title{ font-weight:600; color:#0f172a; }
+.inspector-hd{ display:none; }
 .inspector-hd .mini{ width:24px; height:24px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; }
-.inspector-tabs{ display:flex; gap:6px; padding:0 10px 6px 10px; border-bottom:1px solid #e5e7eb; position: sticky; top: 0; background:#fff; z-index:1; }
-.inspector-tabs button{ height:28px; padding:0 10px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; cursor:pointer; }
-.inspector-tabs button.active{ background:#e6f0ff; border-color:#93c5fd; color:#0b57d0; }
+.inspector-tabs{ display:flex; gap:8px; padding:6px 10px; border-bottom:1px solid #e5e7eb; position: sticky; top: 0; background:#fff; z-index:1; align-items:center; }
+.inspector-tabs .sp{ flex:1 1 auto; }
+.inspector-tabs .icon-btn{ width:28px; height:28px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; display:inline-flex; align-items:center; justify-content:center; }
+.inspector-tabs .icon-btn.active{ background:#e6f0ff; border-color:#93c5fd; color:#0b57d0; }
+.inspector-tabs .icon-btn.close{ border-color:#fecaca; color:#b91c1c; }
 .inspector-body{ padding:10px; overflow:auto; }
 .inspector-body .ddl{ white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px; line-height: 1.5; }
 .cm-ddl :deep(.cm-editor){ height:auto; border:1px solid #e5e7eb; border-radius:6px; background:#fff; }
