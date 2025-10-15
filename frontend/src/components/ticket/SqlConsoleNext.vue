@@ -1647,7 +1647,7 @@ onUpdated(() => {
 .vsplit{ background:transparent; position:relative; cursor:col-resize; }
 .vsplit::before{ content:""; position:absolute; left:2px; top:0; bottom:0; width:2px; background:#e5e7eb; }
 .vsplit:hover::before{ background:#cbd5e1; }
-.right{ position:relative; display:grid; grid-template-columns: 1fr 0; grid-template-rows: auto auto auto 8px 1fr; column-gap: 8px; min-height:0; min-width:0; z-index: 0; background:#f8fafc; }
+.right{ position:relative; display:grid; grid-template-columns: 1fr 0; grid-template-rows: auto auto auto 8px 1fr; column-gap: 8px; min-height:0; min-width:0; z-index: 0; background:#f8fafc; height: calc(100vh - var(--statusbar-h)); }
 .right.inspector-on{ grid-template-columns: 1fr var(--insp-w, 360px); }
 .right > .editor-wrap{ margin-top:0; }
 .toolbar{ display:none; }
@@ -1719,6 +1719,8 @@ onUpdated(() => {
 .rbody.table-mode .table-holder{ height:100%; display:flex; flex-direction:column; }
 .rbody.table-mode :deep(.tq-table-fixed){ flex:1 1 auto; min-height:0; }
 .rbody.table-mode :deep(.tq-scroll-x){ z-index: 2; }
+.rbody.table-mode{ overflow: hidden; }
+.rbody.table-mode :deep(.tq-body){ height:100%; overflow: auto; padding-bottom: var(--statusbar-h); box-sizing: border-box; }
 .rbody::-webkit-scrollbar{ width:10px; height:10px }
 .rbody::-webkit-scrollbar-thumb{ background:#94a3b8; border-radius:6px }
 .rbody::-webkit-scrollbar-thumb:hover{ background:#64748b }
@@ -1738,8 +1740,8 @@ onUpdated(() => {
 .tq-pagination .icon-btn{ width:28px; height:28px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; color:#0b57d0; cursor:pointer; }
 .tq-pagination .icon-btn:hover{ background:#f8fafc; }
 
-.inspector{ border-left:1px solid #e5e7eb; background:#fff; display:flex; flex-direction:column; align-self:start; position: sticky; top: 0; height: calc(100vh - 0px); overflow: auto; }
-.insp-resizer{ cursor: col-resize; width: 6px; margin-left: -3px; background: transparent; position: sticky; top: 0; height: 100vh; align-self:start; }
+.inspector{ border-left:1px solid #e5e7eb; background:#fff; display:flex; flex-direction:column; align-self:stretch; position: sticky; top: 0; height: 100%; max-height: 100%; overflow: auto; }
+.insp-resizer{ cursor: col-resize; width: 6px; margin-left: -3px; background: transparent; position: sticky; top: 0; height: 100%; align-self:stretch; }
 .insp-resizer:hover{ background: rgba(59,130,246,.2); }
 .inspector-hd{ display:none; }
 .inspector-hd .mini{ width:24px; height:24px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; }
