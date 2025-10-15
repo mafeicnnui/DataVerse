@@ -1,9 +1,7 @@
 <template>
   <div class="sql-next">
     <header class="hdr">
-      <img class="brand" src="/dataverse_logo.png" alt="logo" />
-      <div class="title">星域SQL控制台</div>
-      <div class="big-actions" style="margin-left:auto">
+      <div class="big-actions" style="margin-right:auto">
         <button class="big-btn" title="新建查询" @click="newTab()">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13H13v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
           <span>新建查询</span>
@@ -33,6 +31,8 @@
           <span>触发器</span>
         </button>
       </div>
+      <img class="brand" src="/dataverse_logo.png" alt="logo" title="星辰疆域，数据宇宙" />
+      <div class="title" title="星辰疆域，数据宇宙">SQL控制台</div>
     </header>
     <div class="layout" :style="{ '--left-w': leftWidth + 'px' }">
     <!-- 左侧：三层树（实例->库->表） + 全局搜索 -->
@@ -189,7 +189,10 @@
         </div>
         <div class="gsearch">
           <div class="searchbox">
-            <span class="ico" aria-hidden="true">🔍</span>
+            <span class="ico" aria-hidden="true">
+              <!-- 放大镜图标，Navicat 风格 -->
+              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16a6.471 6.471 0 0 0 4.23-1.57l.27.28v.79l5 5 1.5-1.5-5-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.505 4.505 0 0 1 9.5 14z"/></svg>
+            </span>
             <input v-model.trim="globalDbSearch" placeholder="搜索" />
             <button class="mini action" title="清除所有过滤" @click="clearAllDbFilters">🧹</button>
             <button class="mini action" title="折叠菜单" @click="collapseAllDbs">📂</button>
@@ -318,12 +321,14 @@
         </div>
         <!-- 右侧对象查看器（默认隐藏，网格列2，覆盖编辑器+结果高度） -->
         <aside class="inspector" :style="{ display: inspectorVisible ? 'flex' : 'none', gridColumn: 2, gridRow: '1 / 6' }">
-          <div class="inspector-tabs">
-            <button class="icon-btn" :class="{active: inspectorTab==='ddl'}" title="DDL（结构）" @click="inspectorTab='ddl'">
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h16v2H4V5zm0 6h16v2H4v-2zm0 6h10v2H4v-2z"/></svg>
-            </button>
+          <div class="inspector-tabs centered">
             <button class="icon-btn" :class="{active: inspectorTab==='meta'}" title="元数据" @click="inspectorTab='meta'">
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h14v2H7V5zm0 6h14v2H7v-2zm0 6h14v2H7v-2zM3 5h2v2H3V5zm0 6h2v2H3v-2zm0 6h2v2H3v-2z"/></svg>
+              <!-- 图标：信息 i 风格 -->
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 4a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm2 12h-4v-2h1v-5h-1V9h3v7h1z"/></svg>
+            </button>
+            <button class="icon-btn" :class="{active: inspectorTab==='ddl'}" title="DDL（结构）" @click="inspectorTab='ddl'">
+              <!-- 图标：表格网格风格 -->
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h16v14H4V5zm2 2v4h4V7H6zm6 0v4h6V7h-6zM6 13v4h4v-4H6zm6 0v4h6v-4h-6z"/></svg>
             </button>
             <div class="sp"></div>
             <button class="icon-btn close" title="关闭" @click="()=>{ inspectorVisible=false }">
@@ -334,8 +339,41 @@
             <div v-if="!inspectorDDL" class="ddl muted">加载中...</div>
             <div v-else class="ddl cm-ddl" ref="inspDDLRef"></div>
           </div>
-          <div class="inspector-body" v-else>
-            <div class="meta-item" v-for="(v,k) in inspectorMeta" :key="String(k)"><span class="k">{{ k }}</span><span class="v">{{ v }}</span></div>
+          <div class="inspector-body meta" v-else>
+            <div class="meta-head" v-if="inspectorLast">
+              <div class="mh-avatar" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                  <defs>
+                    <linearGradient id="tblTop" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stop-color="#0b77ff"/>
+                      <stop offset="1" stop-color="#3aa0ff"/>
+                    </linearGradient>
+                  </defs>
+                  <rect x="2" y="3" width="20" height="18" rx="4" ry="4" fill="#e6f0ff"/>
+                  <rect x="2" y="3" width="20" height="6" rx="4" ry="4" fill="url(#tblTop)"/>
+                  <rect x="5" y="11" width="6" height="4" fill="#cfe5ff"/>
+                  <rect x="13" y="11" width="6" height="4" fill="#cfe5ff"/>
+                  <rect x="5" y="16" width="6" height="4" fill="#a8d0ff"/>
+                  <rect x="13" y="16" width="6" height="4" fill="#a8d0ff"/>
+                </svg>
+              </div>
+              <div class="mh-info">
+                <div class="mh-name">{{ inspectorLast.tbl }}</div>
+               </div>
+              <button class="mh-share" title="共享">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 5a3 3 0 1 0-2.83-4H13a3 3 0 0 0 3 3zM8 13a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm8-8a3 3 0 0 0-2.24 1.04L8.91 9.07a3 3 0 0 1 0 1.86l4.85 3.03A3 3 0 1 0 15 12c-.33 0-.65.06-.95.16l-4.85-3.03a3 3 0 0 0 0-1.86l4.85-3.03C14.35 1.94 14.67 2 15 2a3 3 0 1 0 1 3z"/></svg>
+              </button>
+            </div>
+            <div class="meta-grid">
+              <div class="label">实例</div>
+              <div class="val">{{ instanceAddr }}</div>
+              <div class="label">数据库</div>
+              <div class="val">{{ activeDatabase || currentDb }}</div>
+              <template v-for="(v,k) in inspectorMeta" :key="String(k)">
+                <div class="label">{{ metaLabel(k) }}</div>
+                <div class="val">{{ v }}</div>
+              </template>
+            </div>
           </div>
         </aside>
         <!-- 垂直拖动条：用于调整对象查看器宽度（位于两列之间） -->
@@ -346,7 +384,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUpdated, onBeforeUnmount, provide, nextTick, watchEffect } from 'vue'
+import { ref, reactive, computed, onMounted, onUpdated, onBeforeUnmount, provide, nextTick, watchEffect, watch } from 'vue'
 import api from '../../api'
 import SqlTabs from './SqlTabs.vue'
 import ResultTable from './ResultTable.vue'
@@ -459,7 +497,7 @@ const inspectorLast = ref<{ id:any; db:string; tbl:string }|null>(null)
 async function openInspector(id:any, db:string, tbl:string){
   inspectorVisible.value = true
   inspectorLast.value = { id, db, tbl }
-  inspectorTab.value = 'ddl'
+  inspectorTab.value = 'meta'
   inspectorTitle.value = `${db}.${tbl}`
   inspectorDDL.value = '加载中...'
   for (const k in inspectorMeta) delete (inspectorMeta as any)[k]
@@ -491,6 +529,9 @@ async function openInspector(id:any, db:string, tbl:string){
     inspectorDDL.value = e?.response?.data?.detail || e?.message || '加载失败'
   }
 }
+
+// 监听对象窗口 tab 切换：回到 DDL 时根据最新的 inspectorDDL 重新挂载 CodeMirror
+// 注意：该监听应放在 inspectorTab 初始化之后（见下文），避免"before initialization"错误
 // 表级展开状态
 const tableOpen = reactive<Record<string, boolean>>({})
 function tableKey(id:any, db:string, tbl:string){ return `${id}::${db}::${tbl}` }
@@ -580,11 +621,69 @@ let toolbarObserver: MutationObserver | null = null
 let toolbarObservedEl: HTMLElement | null = null
 // 对象查看器状态
 const inspectorVisible = ref(false)
-const inspectorTab = ref<'ddl'|'meta'>('ddl')
+const inspectorTab = ref<'ddl'|'meta'>('meta')
 const inspectorDDL = ref('')
 const inspectorMeta = reactive<Record<string, any>>({})
 const inspectorTitle = ref('')
 const inspectorWidth = ref(360)
+
+// 元数据字段中文映射（精简常见字段；未知字段原样返回）
+function metaLabel(key: string){
+  const map: Record<string,string> = {
+    Name: '表名',
+    name: '表名',
+    Engine: '引擎',
+    engine: '引擎',
+    Version: '版本',
+    Row_format: '行格式',
+    row_format: '行格式',
+    Rows: '行',
+    Avg_row_length: '平均行长',
+    Data_length: '数据长度',
+    Max_data_length: '最大数据长度',
+    Index_length: '索引长度',
+    Data_free: '空闲数据',
+    Auto_increment: '自动递增',
+    Create_time: '创建日期',
+    Update_time: '修改日期',
+    Check_time: '检查时间',
+    Collation: '排序规则',
+    Checksum: '校验和',
+    Create_options: '创建选项',
+    Comment: '注释'
+  }
+  return map[key] || map[key?.toString()] || key
+}
+
+function copyText(text: string){
+  try{ navigator.clipboard?.writeText(String(text||'')) }catch{}
+}
+
+const instanceAddr = computed(()=>{
+  try{
+    const inst = (instances.value||[]).find((i:any)=> i?.id===activeConnId.value)
+    return inst ? `${inst.ip || ''}${inst.port? (':' + inst.port): ''}` : ''
+  }catch{ return '' }
+})
+
+// 放在定义之后，避免初始化顺序问题
+watch(inspectorTab, async (tab) => {
+  if (tab !== 'ddl') return
+  await nextTick()
+  try {
+    const host = inspDDLRef.value
+    if (!host) return
+    host.innerHTML = ''
+    if (inspDDLView) { try { inspDDLView.destroy() } catch {} inspDDLView = null }
+    inspDDLView = new EditorView({
+      parent: host,
+      state: EditorState.create({
+        doc: inspectorDDL.value || '',
+        extensions: [sql({ dialect: MySQL }), syntaxHighlighting(defaultHighlightStyle), EditorView.editable.of(false)]
+      })
+    })
+  } catch {}
+})
 // 对象视图状态
 const objectMode = ref<'none'|'tables'|'views'|'functions'|'procedures'|'events'|'triggers'>('none')
 const isObjectActive = computed(()=> objectMode.value !== 'none')
@@ -1008,7 +1107,7 @@ function clearAllDbFilters(){
   for (const k of Object.keys(dbFilterTextByKey)) delete dbFilterTextByKey[k]
   dbFilterPopup.show = false
   dbFilterVisibleKey.value = ''
-  // 同时清除“实例级别的库选择过滤”（全局清理）
+  // 同时清除"实例级别的库选择过滤"（全局清理）
   try {
     for (const id in selectedDbByConn) {
       const set = selectedDbByConn[id]
@@ -1550,11 +1649,15 @@ onUpdated(() => {
 
 <style scoped>
 .sql-next { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-.hdr { display:flex; align-items:center; gap:10px; padding:10px 12px; background: linear-gradient(90deg,#e8f0fe,#dbe8ff); border-bottom:1px solid #c7d2fe; color:#0b57d0; }
-.hdr .title{ font-weight:700; }
+.hdr { display:flex; align-items:center; gap:10px; padding:6px 12px; background: linear-gradient(90deg,#e8f0fe,#dbe8ff); border-bottom:1px solid #c7d2fe; color:#0b57d0; }
+.hdr .title{ font-weight:400; font-size:14px; }
 .hdr .brand{ width:22px; height:22px; object-fit:contain; }
-.big-actions{ display:flex; gap:10px; margin-left:16px; }
-.big-btn{ display:flex; flex-direction:column; align-items:center; justify-content:center; width:64px; height:56px; border:1px solid #c7d2fe; border-radius:10px; background:#fff; color:#0b57d0; cursor:pointer; }
+.big-actions{ display:flex; gap:10px; flex-wrap: nowrap; }
+/* Navicat 风格：图标在上，文字在下，按钮更简洁 */
+.big-btn{ display:flex; flex-direction:column; align-items:center; justify-content:center; width:50px; height:50px; border:1px solid transparent; border-radius:12px; background:transparent; color:#0b57d0; cursor:pointer; padding:6px 4px; box-sizing: border-box; }
+.big-btn:hover{ background:#eef4ff; border-color:#c7d2fe; }
+.big-btn svg{ width:20px; height:20px; margin-bottom:4px; display:block; margin-left:auto; margin-right:auto; }
+.big-btn span{ font-size:10px; line-height:1.2; white-space: nowrap; overflow: visible; text-overflow: clip; width:100%; text-align:center; }
 .big-btn svg{ width:24px; height:24px; }
 .big-btn span{ font-size:12px; margin-top:4px; }
 .big-btn:hover{ background:#eef2ff; }
@@ -1628,7 +1731,6 @@ onUpdated(() => {
 .inst-panel .ph-search{ position: sticky; top:0; }
 .inst-panel .ph-search{ position: sticky; top:0; }
 .inst-panel .ph-search{ position: sticky; top:0; }
-.inst-panel .ph-search{ position: sticky; top:0; }
 .inst-panel .ph-search{ position: sticky; top:0; position: relative; }
 .inst-panel .ph-search .ico{ position:absolute; left:18px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:14px; pointer-events:none; }
 .inst-panel .ph-search input{ width:100%; height:26px; border:1px solid #c7d2fe; border-radius:6px; padding:2px 34px 2px 32px; font-size:13px; outline:none; }
@@ -1637,12 +1739,12 @@ onUpdated(() => {
 .panel .phd{ display:flex; align-items:center; justify-content:space-between; padding:6px 8px; border-bottom:1px solid #e5e7eb; color:#0b57d0; font-weight:600; }
 .panel .plist{ max-height:220px; overflow:auto; padding:6px 8px; }
 .panel .opt{ display:block; padding:4px 6px; }
-.gsearch{ border-top:1px solid #e5e7eb; padding:8px; flex:0 0 auto; }
+.gsearch{ border-top:0; padding:6px 8px; flex:0 0 auto; }
 .gsearch .searchbox{ position: relative; }
 .gsearch .searchbox .ico{ position:absolute; left:8px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:14px; }
-.gsearch .searchbox input{ width:100%; height:28px; padding:4px 64px 4px 28px; border:1px solid #c7d2fe; border-radius:6px; outline:none; }
-.gsearch .searchbox input:focus{ border-color:#c7d2fe; box-shadow:none; }
-.gsearch .searchbox .action{ position:absolute; top:50%; transform:translateY(-50%); right:8px; width:24px; height:24px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; cursor:pointer; margin-left:4px; }
+.gsearch .searchbox input{ width:100%; height:26px; padding:4px 56px 4px 28px; border:0; border-radius:0; outline:none; box-shadow:none; background:#f8fafc; }
+.gsearch .searchbox input:focus{ border:0; box-shadow:none; }
+.gsearch .searchbox .action{ position:absolute; top:50%; transform:translateY(-50%); right:8px; width:24px; height:24px; border:0; border-radius:6px; background:transparent; color:#334155; cursor:pointer; margin-left:4px; }
 .gsearch .searchbox .action + .action{ right:36px; }
 .vsplit{ background:transparent; position:relative; cursor:col-resize; }
 .vsplit::before{ content:""; position:absolute; left:2px; top:0; bottom:0; width:2px; background:#e5e7eb; }
@@ -1709,7 +1811,7 @@ onUpdated(() => {
 .editor :deep(.cm-scroller::-webkit-scrollbar-thumb:hover){ background:#64748b; }
 .editor :deep(.cm-scroller::-webkit-scrollbar-track){ background:transparent; }
 .hsplit{ height:24px; cursor:row-resize; position:relative; background:transparent; z-index:5; pointer-events:auto; }
-.hsplit::before{ content:""; position:absolute; left:0; right:0; top:10px; height:3px; background:#cfd3dc; }
+.hsplit::before{ content:""; position:absolute; left:0; right:0; top:10px; height:3px; background:#e5e7eb; }
 .fab-actions{ position:absolute; right:12px; top:6px; display:flex; gap:8px; z-index:30; pointer-events:auto; background:#f1f5f9; padding:4px 6px; border-radius:8px; box-shadow:0 6px 16px rgba(15,23,42,0.12); }
 .code{ width:100%; height:100%; padding:10px; border:1px solid #e5e7eb; border-radius:8px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:13px; line-height:1.6; outline:none; overflow:auto; white-space: pre-wrap; }
 .result{ display:flex; flex-direction:column; min-height:0; position:relative; z-index:1; background:#f8fafc; overflow:hidden; }
@@ -1746,12 +1848,33 @@ onUpdated(() => {
 .inspector-hd{ display:none; }
 .inspector-hd .mini{ width:24px; height:24px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; }
 .inspector-tabs{ display:flex; gap:8px; padding:6px 10px; border-bottom:1px solid #e5e7eb; position: sticky; top: 0; background:#fff; z-index:1; align-items:center; }
+.inspector-tabs.centered{ justify-content: center; position: sticky; gap:6px; }
+.inspector-tabs.centered .sp{ display:none; }
+.inspector-tabs.centered .icon-btn{ border:none; background:transparent; }
+.inspector-tabs.centered .icon-btn.active{ background:transparent; border:none; color:#0b57d0; }
+.inspector-tabs.centered .close{ position:absolute; right:10px; top:50%; transform: translateY(-50%); border:none; background:transparent; }
 .inspector-tabs .sp{ flex:1 1 auto; }
 .inspector-tabs .icon-btn{ width:28px; height:28px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; display:inline-flex; align-items:center; justify-content:center; }
 .inspector-tabs .icon-btn.active{ background:#e6f0ff; border-color:#93c5fd; color:#0b57d0; }
 .inspector-tabs .icon-btn.close{ border-color:#fecaca; color:#b91c1c; }
 .inspector-body{ padding:10px; overflow:auto; }
 .inspector-body .ddl{ white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px; line-height: 1.5; }
+.inspector-body.meta{ padding:12px 14px; }
+.inspector-body .meta-head{ display:flex; align-items:center; gap:10px; padding-bottom:8px; border-bottom:1px solid #e5e7eb; margin-bottom:10px; }
+.inspector-body .mh-avatar{ width:32px; height:32px; border-radius:6px; display:flex; align-items:center; justify-content:center; }
+.inspector-body .mh-info{ display:flex; flex-direction:column; }
+.inspector-body .mh-name{ font-weight:500; color:#111827; font-family: "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+.inspector-body .mh-sub{ font-size:12px; color:#64748b; display:flex; flex-direction:column; gap:6px; margin-top:2px; }
+.inspector-body .mh-conn{ font-size:12px; color:#64748b; margin-bottom:6px; }
+.inspector-body .mh-name .mh-table{ margin-right:6px; vertical-align:middle; }
+.inspector-body .mh-connbox{ border:1px solid #e5e7eb; border-radius:8px; padding:6px 10px; background:#fff; display:inline-flex; flex-direction:column; gap:6px; align-self:start; }
+.inspector-body .mh-connbox .row{ display:flex; align-items:center; gap:8px; }
+.inspector-body .mh-connbox .mini.copy{ display:none; }
+.inspector-body .mh-sub .mh-host, .inspector-body .mh-sub .mh-db{ display:inline-flex; align-items:center; gap:6px; }
+.inspector-body .mh-share{ margin-left:auto; width:26px; height:26px; border:none; background:transparent; color:#0b57d0; }
+.inspector-body .meta-grid{ display:grid; grid-template-columns: 120px 1fr; row-gap:6px; column-gap:12px; padding-top:4px; }
+.inspector-body .meta-grid .label{ color:#64748b; font-family: "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; font-size:13px; }
+.inspector-body .meta-grid .val{ color:#111827; word-break: break-all; font-family: "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; font-size:13px; }
 .cm-ddl :deep(.cm-editor){ height:auto; border:1px solid #e5e7eb; border-radius:6px; background:#fff; }
 .cm-ddl :deep(.cm-scroller){ overflow:auto; }
 .meta-item{ display:flex; gap:8px; padding:4px 0; font-size:13px; }
