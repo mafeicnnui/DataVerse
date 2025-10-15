@@ -1,0 +1,10 @@
+[33mb53ac76[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m ui(sql-next): 隐藏对象窗口顶部表名标题，仅保留右侧图标按钮栏
+[33mb8d897f[m ui(sql-next): 更换表行操作图标为加号与眼睛，并优化按钮样式圆角/阴影/hover
+[33m859e0f6[m fix(sql-next): 移除未安装的 @codemirror/theme-one-dark 依赖，改用默认高亮；DDL 代码区背景白色
+[33m3381590[m fix(sql-next): 强刷后编辑器高度错位恢复编辑器/分割条/结果区的网格行到 3/4/5
+[33me832954[m fix(sql-next): 强制显示结果表横向滚动条  允许 .tq-body overflow-x:auto 并启用 ::-webkit-scrollbar:horizontal；解决强刷后横条不见的问题
+[33mf614c66[m style(sql-console-next): 子菜单从卡片改为独立行，增加上下间距与悬停高亮，层级缩进对齐 Navicat 风格
+[33mbedc24b[m feat(sql-console-next): 完成查看执行计划与美化SQL复用工单查询逻辑，支持标签级实例/数据库上下文并同步结果/文本
+[33mca19145[m feat(sql-console-next): 工具条新增导出 CSV/Excel 图标按钮并复用导出逻辑
+[33m528d7df[m style(sql-console-next): 底部横向滚动条统一成旧版样式（12px 高度、白底、上边线、细圆角浅灰拇指）
+[33me537b60[m fix(sql-console): 统一禁用结果表体 .tq-body 横向滚动，隐藏横向滚动条外观，独立页 Shell 内强制 overflow-x:hidden
