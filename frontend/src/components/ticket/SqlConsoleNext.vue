@@ -43,10 +43,10 @@
     <aside class="left">
         <div class="tree" role="tree">
           <div class="inst" v-for="inst in instances" :key="'i-'+inst.id">
-            <div class="inst-hd" @mouseenter="hoverInst=inst.id" @mouseleave="hoverInst=''">
+            <div class="inst-hd" :class="{selected: isSelectedInst(inst.id)}" @mouseenter="hoverInst=inst.id" @mouseleave="hoverInst=''">
               <span class="arrow" :class="{open: expandConn[inst.id]}" aria-hidden="true" @click.stop="toggleConn(inst.id)">›</span>
               <svg class="ico inst" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 4h18v8H3V4zm2 2v4h14V6H5zm-2 8h18v6H3v-6zm2 2v2h6v-2H5zm8 0v2h6v-2h-6z"/></svg>
-              <span class="label" :title="inst.ip + ':' + inst.port">
+              <span class="label" :title="inst.ip + ':' + inst.port" @click.stop="(selectInst(inst.id), openInspectorInstance(inst.id))">
                 {{ inst.description || (inst.ip + ':' + inst.port) || ('#' + inst.id) }}
               </span>
               <button v-show="hoverInst===inst.id || hasInstFilter(inst.id)" class="mini filter" :class="{ active: hasInstFilter(inst.id) }" title="选择实例库" @click.stop="openInstFilter(inst, $event)">⚙</button>
@@ -73,10 +73,10 @@
             </div>
             <ul v-show="expandConn[inst.id]" class="dbs">
               <li class="db" v-for="db in filteredDbList(inst.id)" :key="'db-'+inst.id+'-'+db">
-                <div class="db-hd" @mouseenter="hoverDb=inst.id+':'+db" @mouseleave="onDbMouseLeave(inst.id, db)">
+                <div class="db-hd" :class="{selected: isSelectedDb(inst.id, db)}" @mouseenter="hoverDb=inst.id+':'+db" @mouseleave="onDbMouseLeave(inst.id, db)">
                   <span class="arrow" :class="{open: !!expandDbByConn[inst.id]?.[db]}" aria-hidden="true" @click.stop="toggleDb(inst.id, db)">›</span>
                   <svg class="ico db" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3c-4.97 0-9 1.79-9 4v10c0 2.21 4.03 4 9 4s9-1.79 9-4V7c0-2.21-4.03-4-9-4zm0 2c3.87 0 7 .9 7 2s-3.13 2-7 2-7-.9-7-2 3.13-2 7-2zm0 6c3.87 0 7-.9 7-2v3c0 1.1-3.13 2-7 2s-7-.9-7-2V9c0 1.1 3.13 2 7 2zm0 7c-3.87 0-7-.9-7-2v-3c0 1.1 3.13 2 7 2s7-.9 7-2v3c0 1.1-3.13 2-7 2z"/></svg>
-                  <span class="label" :title="db">{{ db }}</span>
+                  <span class="label" :title="db" @click.stop="(selectDb(inst.id, db), openInspectorDatabase(inst.id, db))">{{ db }}</span>
                   <button
                     v-show="hoverDb===inst.id+':'+db || !!dbFilterTextByKey[keyOf(inst.id, db)] || dbFilterVisibleKey===keyOf(inst.id, db)"
                     class="mini filter"
@@ -97,38 +97,37 @@
                     </div>
                     <ul class="tbls" v-show="isDbCatOpen(inst.id, db, 'tables')">
                       <li class="tbl" v-for="t in filteredTablesForDisplay(inst.id, db)" :key="'t-'+inst.id+'-'+db+'-'+t">
-                        <div class="table-hd">
+                        <div class="table-hd" :class="{ active: isTableOpen(inst.id, db, t), selected: isSelectedTable(inst.id, db, t) }">
                           <span class="arrow" :class="{open: isTableOpen(inst.id, db, t)}" @click.stop="toggleTableCats(inst.id, db, t)" aria-hidden="true">›</span>
-                          <svg class="ico tbl" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v14H3V5zm2 2v2h14V7H5zm0 4v2h14v-2H5zm0 4v2h14v-2H5z"/></svg>
-                          <span class="label">{{ t }}</span>
+                          <svg class="ico tbl" viewBox="0 0 24 24" aria-hidden="true" @click.stop="(selectTable(inst.id, db, t), openInspector(inst.id, db, t))"><path fill="currentColor" d="M3 5h18v14H3V5zm2 2v2h14V7H5zm0 4v2h14v-2H5zm0 4v2h14v-2H5z"/></svg>
+                          <span class="label" @click.stop="(selectTable(inst.id, db, t), openInspector(inst.id, db, t))">{{ t }}</span>
                           <div class="inline-actions" aria-label="表操作">
                             <button class="tb-act" title="新建查询" @click.stop="insertQuickQuery(db, t)">
                               <!-- 加号：表示为该表新建查询 -->
                               <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
                             </button>
-                            <button class="tb-act" title="查看对象信息" @click.stop="openInspector(inst.id, db, t)">
-                              <!-- 眼睛：查看对象信息（DDL/元数据） -->
-                              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 2a5 5 0 110 10 5 5 0 010-10z"/></svg>
-                            </button>
+                            
                           </div>
                         </div>
                         <!-- 每个表的子分类（列/索引/外键/触发器/事件） -->
                         <ul class="table-cats" v-show="isTableOpen(inst.id, db, t)">
-                          <li class="subcat">
-                            <svg class="ico col" viewBox="0 0 24 24" aria-hidden="true" @click.stop="(ensurePrimaryColumns(inst.id, db, t), toggleTableColumns(inst.id, db, t))"><path fill="currentColor" d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2z"/></svg>
+                          <li class="subcat" :class="{selected: isSelectedCat(inst.id, db, t, 'columns') }" @click.stop="selectCat(inst.id, db, t, 'columns')">
+                            <span class="arrow" :class="{open: isColumnsOpen(inst.id, db, t)}" aria-hidden="true" @click.stop="(ensurePrimaryColumns(inst.id, db, t), toggleTableColumns(inst.id, db, t))">›</span>
+                            <svg class="ico col" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2z"/></svg>
                             <span>Columns</span>
                           </li>
                           <ul v-show="isColumnsOpen(inst.id, db, t)" class="columns">
                             <li class="muted" v-if="isColsLoading(inst.id, db, t)">加载中...</li>
-                            <li class="col-name" v-for="c in getColumns(inst.id, db, t)" :key="'c-'+inst.id+'-'+db+'-'+t+'-'+c">
+                            <li class="col-name" v-for="c in getColumns(inst.id, db, t)" :key="'c-'+inst.id+'-'+db+'-'+t+'-'+c" :class="{selected: isSelectedColumn(inst.id, db, t, c)}" @click.stop="(selectColumn(inst.id, db, t, c), openInspectorColumn(inst.id, db, t, c))">
                               <svg v-if="isPrimaryKey(inst.id, db, t, c)" class="ico pk" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 14a5 5 0 1 1 3.9 4.9L9 22H7v-2H5v-2H3v-2h4.1A5 5 0 0 1 7 14Zm8-5a3 3 0 1 0-6 0a3 3 0 0 0 6 0Z"/></svg>
                               <svg v-else class="ico col2" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2z"/></svg>
                               <span class="name">{{ c }}</span>
                             </li>
                             <li class="muted" v-if="!isColsLoading(inst.id, db, t) && getColumns(inst.id, db, t).length===0">无列</li>
                           </ul>
-                          <li class="subcat">
-                            <svg class="ico idx" viewBox="0 0 24 24" aria-hidden="true" @click.stop="toggleTableIndexes(inst.id, db, t)"><path fill="currentColor" d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z"/></svg>
+                          <li class="subcat" :class="{selected: isSelectedCat(inst.id, db, t, 'indexes') }" @click.stop="selectCat(inst.id, db, t, 'indexes')">
+                            <span class="arrow" :class="{open: isIndexesOpen(inst.id, db, t)}" aria-hidden="true" @click.stop="toggleTableIndexes(inst.id, db, t)">›</span>
+                            <svg class="ico idx" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z"/></svg>
                             <span>Indexes</span>
                           </li>
                           <ul v-show="isIndexesOpen(inst.id, db, t)" class="columns">
@@ -491,6 +490,69 @@ async function toggleTableIndexes(id:any, db:string, tbl:string){
   }
 }
 
+// 实例信息
+async function openInspectorInstance(id:any){
+  inspectorKind.value = 'instance'
+  inspectorVisible.value = true
+  inspectorTab.value = 'meta'
+  inspectorTitle.value = '实例'
+  inspectorDDL.value = ''
+  for (const k in inspectorMeta) delete (inspectorMeta as any)[k]
+  try{
+    const { data } = await api.get(`/connections/${id}`)
+    Object.assign(inspectorMeta, {
+      地址: `${data?.ip || ''}:${data?.port || ''}`,
+      用户名: data?.user || '',
+      类型: data?.db_type || data?.type || 'MySQL',
+      描述: data?.description || ''
+    })
+  }catch{}
+}
+
+// 数据库信息
+async function openInspectorDatabase(id:any, db:string){
+  inspectorKind.value = 'database'
+  inspectorVisible.value = true
+  inspectorTab.value = 'meta'
+  inspectorTitle.value = db
+  inspectorDDL.value = ''
+  for (const k in inspectorMeta) delete (inspectorMeta as any)[k]
+  try{
+    const sql = `SELECT DEFAULT_CHARACTER_SET_NAME AS charset, DEFAULT_COLLATION_NAME AS collation FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='${db.replace(/'/g, "''")}' LIMIT 1`
+    const { data } = await api.post('/ticket/execute', { connId: id, database: db, sql, page:1, pageSize:1 })
+    let charset = '', collation = ''
+    try{
+      const row = (data?.data && data.data[0]) || (Array.isArray(data) && data[0]) || (data?.rows && data.rows[0]) || null
+      charset = row?.charset || row?.CHARSET || row?.DEFAULT_CHARACTER_SET_NAME || ''
+      collation = row?.collation || row?.COLLATION || row?.DEFAULT_COLLATION_NAME || ''
+    }catch{}
+    Object.assign(inspectorMeta, { 数据库: db, 字符集: charset, 排序规则: collation })
+  }catch{
+    Object.assign(inspectorMeta, { 数据库: db })
+  }
+}
+
+// 列信息
+async function openInspectorColumn(id:any, db:string, tbl:string, col:string){
+  inspectorKind.value = 'column'
+  inspectorVisible.value = true
+  inspectorTab.value = 'meta'
+  inspectorTitle.value = `${tbl}.${col}`
+  for (const k in inspectorMeta) delete (inspectorMeta as any)[k]
+  try{
+    const sql = `SELECT COLUMN_NAME, DATA_TYPE, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_COMMENT FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${db.replace(/'/g, "''")}' AND TABLE_NAME='${tbl.replace(/'/g, "''")}' AND COLUMN_NAME='${col.replace(/'/g, "''")}' LIMIT 1`
+    const { data } = await api.post('/ticket/execute', { connId: id, database: db, sql, page:1, pageSize:1 })
+    const row = (data?.data && data.data[0]) || (Array.isArray(data) && data[0]) || (data?.rows && data.rows[0]) || {}
+    Object.assign(inspectorMeta, {
+      字段: row.COLUMN_NAME || col,
+      类型: row.COLUMN_TYPE || row.DATA_TYPE || '',
+      允许为空: (row.IS_NULLABLE || '').toString(),
+      默认值: row.COLUMN_DEFAULT ?? '',
+      注释: row.COLUMN_COMMENT || ''
+    })
+  }catch{}
+}
+
 // 主键列缓存
 const pkCache = reactive<Record<string, string[]>>({})
 async function ensurePrimaryColumns(id:any, db:string, tbl:string){
@@ -532,6 +594,7 @@ function insertQuickQuery(db:string, tbl:string){
 // 打开对象查看器
 const inspectorLast = ref<{ id:any; db:string; tbl:string }|null>(null)
 async function openInspector(id:any, db:string, tbl:string){
+  inspectorKind.value = 'table'
   inspectorVisible.value = true
   inspectorLast.value = { id, db, tbl }
   inspectorTab.value = 'meta'
@@ -657,8 +720,21 @@ const toolbarActionsRef = ref<HTMLElement | null>(null)
 let toolbarObserver: MutationObserver | null = null
 let toolbarObservedEl: HTMLElement | null = null
 // 对象查看器状态
-const inspectorVisible = ref(false)
+const inspectorVisible = ref(true)
+// 左树选中态（用于高亮）
+const selected = reactive<{ inst?: any; db?: { id:any, name:string } | null; table?: { id:any, db:string, name:string } | null; cat?: { id:any, db:string, tbl:string, name:'columns'|'indexes'|'foreign'|'triggers'|'events' } | null; column?: { id:any, db:string, tbl:string, name:string } | null }>({ inst: null, db: null, table: null, cat: null, column: null })
+function isSelectedInst(id:any){ return selected.inst===id }
+function isSelectedDb(id:any, db:string){ return !!selected.db && selected.db.id===id && selected.db.name===db }
+function isSelectedTable(id:any, db:string, tbl:string){ return !!selected.table && selected.table.id===id && selected.table.db===db && selected.table.name===tbl }
+function isSelectedCat(id:any, db:string, tbl:string, name:any){ const c=selected.cat; return !!c && c.id===id && c.db===db && c.tbl===tbl && c.name===name }
+function isSelectedColumn(id:any, db:string, tbl:string, col:string){ const c=selected.column; return !!c && c.id===id && c.db===db && c.tbl===tbl && c.name===col }
+function selectInst(id:any){ selected.inst=id; selected.db=null; selected.table=null; selected.cat=null }
+function selectDb(id:any, db:string){ selected.inst=id; selected.db={ id, name: db }; selected.table=null; selected.cat=null }
+function selectTable(id:any, db:string, tbl:string){ selected.inst=id; selected.db={ id, name: db }; selected.table={ id, db, name: tbl }; selected.cat=null }
+function selectCat(id:any, db:string, tbl:string, name:any){ selected.inst=id; selected.db={ id, name: db }; selected.table={ id, db, name: tbl }; selected.cat={ id, db, tbl, name } }
+function selectColumn(id:any, db:string, tbl:string, col:string){ selected.inst=id; selected.db={ id, name: db }; selected.table={ id, db, name: tbl }; selected.column={ id, db, tbl, name: col } }
 const inspectorTab = ref<'ddl'|'meta'>('meta')
+const inspectorKind = ref<'table'|'database'|'instance'|'column'|'index'>('table')
 const inspectorDDL = ref('')
 const inspectorMeta = reactive<Record<string, any>>({})
 const inspectorTitle = ref('')
@@ -1797,7 +1873,8 @@ onUpdated(() => {
 .cats{ list-style:none; margin:0; padding:4px 0 0 16px; }
 .tbls{ list-style:none; margin:0; padding:2px 0 0 16px; }
 .tbl{ padding:2px 6px; border-radius:4px; cursor:pointer; position: relative; }
-.tbl:hover{ background:#f1f5f9; }
+.tbl.active, .db-hd.active, .inst-hd.active, .subcat.active, .cat-hd.active, .inst-hd.selected, .db-hd.selected, .table-hd.selected, .subcat.selected, .columns .col-name.selected{ background:#e6f0ff; }
+.tbl:hover{ background:transparent; }
 .cat{ margin:2px 0; }
 .cat-hd{ display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:4px; cursor:pointer; color:#0f172a; }
 .cat-hd:hover{ background:#eef2ff; }
@@ -1967,7 +2044,7 @@ onUpdated(() => {
 .gridbar .muted{ color:#64748b; font-size:12px; }
 
 .inspector{ border-left:1px solid #e5e7eb; background:#fff; display:flex; flex-direction:column; align-self:stretch; position: sticky; top: 0; height: 100%; max-height: 100%; overflow: auto; }
-.insp-resizer{ cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><path d="M5 12 L11 6 M5 12 L11 18 M19 12 L13 6 M19 12 L13 18 M11 12 L13 12" stroke="%230b57d0" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>') 12 12, ew-resize; width: 6px; margin-left: -3px; background: transparent; position: sticky; top: 0; height: 100%; align-self:stretch; }
+.insp-resizer{ cursor: col-resize; width: 6px; margin-left: -3px; background: transparent; position: sticky; top: 0; height: 100%; align-self:stretch; }
 .inspector-hd{ display:none; }
 .inspector-hd .mini{ width:24px; height:24px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; }
 .inspector-tabs{ display:flex; gap:8px; padding:6px 10px; border-bottom:1px solid #e5e7eb; position: sticky; top: 0; background:#fff; z-index:1; align-items:center; }
