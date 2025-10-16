@@ -264,20 +264,53 @@
           </div>
           <!-- 底部横向滚动条改为使用 ResultTable 内部自带横向滚动 -->
           <div class="x-scroll" ref="xScrollRef" v-if="false"></div>
-          <div class="tq-pagination" v-if="result && result.type==='table'">
-            <button class="icon-btn" :disabled="page<=1" @click="goToPage(page-1)" title="上一页">‹</button>
-            <span class="muted">第</span>
-            <input type="number" v-model.number="pageInput" @keyup.enter="handlePageJump" min="1" :max="totalPages" style="width:70px;height:28px" />
-            <span class="muted">/ {{ totalPages }} 页</span>
-            <button class="icon-btn" :disabled="page>=totalPages" @click="goToPage(page+1)" title="下一页">›</button>
-            <span class="muted" style="margin-left:12px">每页</span>
-            <select :value="pageSize" @change="handlePageSizeChange($event)" title="每页条数">
-              <option :value="10">10</option>
-              <option :value="20">20</option>
-              <option :value="50">50</option>
-              <option :value="100">100</option>
-            </select>
-            <span class="muted">条，共 {{ totalRows || 0 }} 条</span>
+          <div class="gridbar" v-if="result && result.type==='table'">
+            <div class="gb-left">
+              <button class="icon-btn" @click="addRow" title="增加">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/></svg>
+              </button>
+              <button class="icon-btn warn" :disabled="selectedRowIndex<0" @click="deleteRow" title="删除">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 7h12v2H6zm2 3h8l-1 9H9L8 10zm3-6h2l1 2H10z"/></svg>
+              </button>
+              <span class="sep"></span>
+              <button class="icon-btn info" :disabled="!hasEdits" @click="applyChanges" title="应用更改">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+              </button>
+              <button class="icon-btn" :disabled="!hasEdits" @click="discardChanges" title="放弃更改">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 5v3l4-4-4-4v3C6.5 3 2 7.5 2 13s4.5 10 10 10 10-4.5 10-10h-2c0 4.4-3.6 8-8 8s-8-3.6-8-8 3.6-8 8-8z"/></svg>
+              </button>
+              <span class="sep"></span>
+              <button class="icon-btn" :disabled="running" @click="refresh" title="刷新">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7c2.76 0 5 2.24 5 5a5 5 0 0 1-8.9 3H6.26A7 7 0 1 0 19 12c0-1.61-.55-3.09-1.35-4.24z"/></svg>
+              </button>
+              <button class="icon-btn warn" :disabled="!running" @click="stop" title="停止">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
+              </button>
+            </div>
+            <div class="gb-right">
+              <button class="icon-btn" :disabled="page<=1" @click="goToPage(1)" title="第一页">«</button>
+              <button class="icon-btn" :disabled="page<=1" @click="goToPage(page-1)" title="上一页">‹</button>
+              <span class="muted">第</span>
+              <input type="number" v-model.number="pageInput" @keyup.enter="handlePageJump" min="1" :max="totalPages" />
+              <span class="muted">/ {{ totalPages }} 页</span>
+              <button class="icon-btn" :disabled="page>=totalPages" @click="goToPage(page+1)" title="下一页">›</button>
+              <button class="icon-btn" :disabled="page>=totalPages" @click="goToPage(totalPages)" title="最后一页">»</button>
+              <span class="muted" style="margin-left:12px">每页</span>
+              <select :value="pageSize" @change="handlePageSizeChange($event)" title="每页条数">
+                <option :value="10">10</option>
+                <option :value="20">20</option>
+                <option :value="50">50</option>
+                <option :value="100">100</option>
+              </select>
+              <span class="muted">条</span>
+              <span class="sep"></span>
+              <button class="icon-btn" :class="{active: viewMode==='grid'}" @click="viewMode='grid'" title="网络视图">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/></svg>
+              </button>
+              <button class="icon-btn" :class="{active: viewMode==='form'}" @click="viewMode='form'" title="表单视图">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16v4H4zm0 6h10v4H4zm0 6h16v4H4z"/></svg>
+              </button>
+            </div>
           </div>
         </div>
         <!-- 对象浏览视图（表/视图/函数等）：占用编辑器+结果区域 -->
@@ -841,6 +874,13 @@ const pageSize = ref(50)
 const totalRows = ref(0)
 const pageInput = ref(1)
 const totalPages = computed(()=>{ const t=Number(totalRows.value||0); const ps=Number(pageSize.value||1); return Math.max(1, Math.ceil(t/Math.max(1,ps))) })
+// 视图/选择/编辑状态
+const viewMode = ref<'grid'|'form'>('grid')
+const selectedRowIndex = ref<number>(-1)
+type EditKey = { r:number; c:number }
+const editing = ref<EditKey | null>(null)
+const pendingEdits = reactive<Map<string, any>>(new Map())
+const hasEdits = computed(()=> pendingEdits.size > 0)
 
 // ResultTable 上下文（与旧页一致的头部锁定/排序/同步滚动逻辑）
 const tq = reactive<any>({
@@ -855,7 +895,13 @@ const tq = reactive<any>({
   pageSize,
   isRunning: computed(()=> running.value),
   qTabs: [] as any[],
-  activeQueryTabId: '' as any
+  activeQueryTabId: '' as any,
+  selectedRowIndex,
+  // 供子组件调用：选择/编辑
+  onSelectRow: (idx:number)=>{ selectedRowIndex.value = idx },
+  onBeginEdit: (r:number,c:number, val:any)=>{ beginEdit(r,c,val) },
+  onCommitEdit: (r:number,c:number, val:any)=>{ commitEdit(r,c,val) },
+  onCancelEdit: ()=>{ cancelEdit() }
 })
 const tqHeadTableRef = ref<any>(null)
 const tqBodyTableRef = ref<any>(null)
@@ -990,6 +1036,47 @@ function syncHorizontalScroll(targetLeft?: number){
   } catch {}
 }
 
+// ---- 编辑相关 ----
+function keyOfCell(r:number,c:number){ return `${r}:${c}` }
+function beginEdit(r:number,c:number, val:any){ editing.value = { r, c } }
+function commitEdit(r:number,c:number, val:any){
+  try {
+    const rows = (result.value?.data) as any[]
+    const col = (result.value?.columns||[])[c]
+    if (rows && rows[r] && col) { rows[r][col] = val }
+  } catch {}
+  pendingEdits.set(keyOfCell(r,c), val)
+  editing.value = null
+}
+function cancelEdit(){ editing.value = null }
+function addRow(){
+  try {
+    const cols = (result.value?.columns)||[]
+    const blank:any = {}
+    cols.forEach(k=> blank[k] = null)
+    const rows = (result.value?.data)||[]
+    rows.unshift(blank)
+    selectedRowIndex.value = 0
+  } catch {}
+}
+function deleteRow(){
+  if (selectedRowIndex.value < 0) return
+  try {
+    const rows = (result.value?.data)||[]
+    rows.splice(selectedRowIndex.value, 1)
+    selectedRowIndex.value = Math.min(selectedRowIndex.value, rows.length-1)
+  } catch {}
+}
+function applyChanges(){
+  // 先本地生效；后续扩展可调用后端保存接口
+  pendingEdits.clear()
+}
+function discardChanges(){
+  // 简化：刷新当前页恢复服务器数据
+  refresh()
+}
+function refresh(){ exec() }
+
 provide('tqCtx', {
   tq,
   tqHeadTableRef,
@@ -1006,6 +1093,11 @@ provide('tqCtx', {
   startColResize,
   onBodyScroll,
   resetTableScroll,
+  // selection/edit hooks for ResultTable
+  onSelectRow: (idx:number)=>{ selectedRowIndex.value = idx },
+  onBeginEdit: (r:number,c:number, val:any)=>{ beginEdit(r,c,val) },
+  onCommitEdit: (r:number,c:number, val:any)=>{ commitEdit(r,c,val) },
+  onCancelEdit: ()=>{ cancelEdit() },
   // 供 SqlTabs 使用（与独立窗口保持一致的方法名）
   newQueryTab: () => newTab(),
   closeQueryTab: (id: string) => requestCloseTab(id),
@@ -1861,6 +1953,18 @@ onUpdated(() => {
 .tq-pagination .muted{ color:#64748b; }
 .tq-pagination .icon-btn{ width:28px; height:28px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; color:#0b57d0; cursor:pointer; }
 .tq-pagination .icon-btn:hover{ background:#f8fafc; }
+/* 新Navicat风格底栏（左侧数据操作 + 右侧分页/视图） */
+.gridbar{ flex:0 0 auto; display:flex; align-items:center; justify-content:flex-start; padding:4px 8px; border-top:1px solid #e5e7eb; background:#fff; gap:8px; white-space:nowrap; }
+.gridbar .gb-left,.gridbar .gb-right{ display:flex; align-items:center; gap:6px; flex-wrap:nowrap; }
+.gridbar .gb-right{ margin-left:auto; }
+.gridbar .sep{ width:1px; height:18px; background:#e5e7eb; margin:0 4px; }
+.gridbar .icon-btn{ width:24px; height:24px; border:0; border-radius:6px; background:#fff; color:#374151; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+.gridbar .icon-btn.info{ background:#e6f0ff; border-color:#c7d2fe; color:#0b57d0; }
+.gridbar .icon-btn.warn{ background:#fff1f2; border-color:#fecaca; color:#b91c1c; }
+.gridbar .icon-btn.active{ box-shadow: 0 0 0 2px rgba(59,130,246,.25) inset; }
+.gridbar input[type="number"]{ width:56px; height:24px; border:1px solid #e5e7eb; border-radius:6px; padding:2px 6px; font-size:12px; }
+.gridbar select{ height:24px; border:1px solid #e5e7eb; border-radius:6px; padding:2px 22px 2px 6px; font-size:12px; }
+.gridbar .muted{ color:#64748b; font-size:12px; }
 
 .inspector{ border-left:1px solid #e5e7eb; background:#fff; display:flex; flex-direction:column; align-self:stretch; position: sticky; top: 0; height: 100%; max-height: 100%; overflow: auto; }
 .insp-resizer{ cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><path d="M5 12 L11 6 M5 12 L11 18 M19 12 L13 6 M19 12 L13 18 M11 12 L13 12" stroke="%230b57d0" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>') 12 12, ew-resize; width: 6px; margin-left: -3px; background: transparent; position: sticky; top: 0; height: 100%; align-self:stretch; }

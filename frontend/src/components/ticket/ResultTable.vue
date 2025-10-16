@@ -44,13 +44,19 @@
             <col v-for="(w, i) in ctx.tq.tableColWidths" :key="'b'+i" :style="w ? { width: w + 'px' } : {}">
           </colgroup>
           <tbody :key="'tbody-'+ctx.tq.page+'-'+ctx.tq.pageSize">
-            <tr v-for="(row, rIdx) in ctx.getDisplayedRows()" :key="'p'+ctx.tq.page+'-r'+rIdx+'-'+(row?.id ?? '')">
+            <tr v-for="(row, rIdx) in ctx.getDisplayedRows()" :key="'p'+ctx.tq.page+'-r'+rIdx+'-'+(row?.id ?? '')" @click="onRowClick(rIdx)">
               <td
                 v-for="(col, cIdx) in ctx.tq.result.columns"
                 :key="'c'+cIdx"
-                :class="[{ 'freeze-cell': cIdx < ctx.tq.freezeCount }]"
+                :class="[{ 'freeze-cell': cIdx < ctx.tq.freezeCount }, cellClass(rIdx, cIdx)]"
                 :style="cIdx < ctx.tq.freezeCount ? { left: (ctx.tq.freezeLefts[cIdx] || 0) + 'px' } : {}"
-              >{{ (row && row[col] !== undefined) ? row[col] : row?.[cIdx] }}</td>
+                @dblclick.stop="beginEdit(rIdx, cIdx, row[col])"
+              >
+                <template v-if="isEditing(rIdx, cIdx)">
+                  <input class="cell-editor" :value="cellValue(row, col)" @keydown.enter.prevent="commit(rIdx, cIdx, $event)" @blur="commit(rIdx, cIdx, $event)" />
+                </template>
+                <template v-else>{{ cellValue(row, col) }}</template>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -107,6 +113,15 @@ onBeforeUnmount(() => {
   if (!ctx) return
   if (ctx.tqBodyRef && ctx.tqBodyRef.value === tqBodyRefLocal.value) ctx.tqBodyRef.value = null
 })
+
+// ---- 选择/编辑：委托父组件保存状态 ----
+const editing = ref<{r:number,c:number}|null>(null)
+function onRowClick(r:number){ try { ctx && ctx.onSelectRow && ctx.onSelectRow(r) } catch {} }
+function isEditing(r:number,c:number){ return !!editing.value && editing.value.r===r && editing.value.c===c }
+function beginEdit(r:number,c:number, val:any){ editing.value = { r, c }; try { ctx && ctx.onBeginEdit && ctx.onBeginEdit(r,c,val) } catch {} }
+function commit(r:number,c:number, ev:any){ const val = (ev?.target?.value ?? '').toString(); try { ctx && ctx.onCommitEdit && ctx.onCommitEdit(r,c,val) } catch {}; editing.value = null }
+function cellClass(r:number,c:number){ try { return (ctx?.tq && ctx?.tq?.selectedRowIndex===r) ? 'row-selected' : '' } catch { return '' } }
+function cellValue(row:any, col:any){ return (row && row[col] !== undefined) ? row[col] : row?.[col] }
 </script>
 
 <style>
@@ -122,6 +137,8 @@ onBeforeUnmount(() => {
 .tq-table { border-collapse: separate; border-spacing: 0; width: max-content; table-layout: fixed; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 14px; color: #111827; }
 .tq-table thead { position: sticky; top: 0; z-index: 2; background: #f5f7ff; }
 .tq-table th, .tq-table td { box-sizing: border-box; padding: 8px; border: 1px solid #eee; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 400; font-size: 14px; }
+.tq-table td.row-selected { background: #eef2ff; }
+.tq-table .cell-editor{ width: calc(100% - 8px); height: 24px; font-size: 14px; border:1px solid #93c5fd; border-radius: 4px; padding: 2px 4px; outline: none; }
 .tq-table thead th { background: #f5f7ff; position: relative; }
 
 .tq-table tbody .freeze-cell { position: sticky; background: #fff; z-index: 4; top: auto; }
