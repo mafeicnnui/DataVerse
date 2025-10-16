@@ -43,8 +43,8 @@
     <aside class="left">
         <div class="tree" role="tree">
           <div class="inst" v-for="inst in instances" :key="'i-'+inst.id">
-            <div class="inst-hd" @click="toggleConn(inst.id)" @mouseenter="hoverInst=inst.id" @mouseleave="hoverInst=''">
-              <span class="arrow" :class="{open: expandConn[inst.id]}" aria-hidden="true">›</span>
+            <div class="inst-hd" @mouseenter="hoverInst=inst.id" @mouseleave="hoverInst=''">
+              <span class="arrow" :class="{open: expandConn[inst.id]}" aria-hidden="true" @click.stop="toggleConn(inst.id)">›</span>
               <svg class="ico inst" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 4h18v8H3V4zm2 2v4h14V6H5zm-2 8h18v6H3v-6zm2 2v2h6v-2H5zm8 0v2h6v-2h-6z"/></svg>
               <span class="label" :title="inst.ip + ':' + inst.port">
                 {{ inst.description || (inst.ip + ':' + inst.port) || ('#' + inst.id) }}
@@ -73,8 +73,8 @@
             </div>
             <ul v-show="expandConn[inst.id]" class="dbs">
               <li class="db" v-for="db in filteredDbList(inst.id)" :key="'db-'+inst.id+'-'+db">
-                <div class="db-hd" @click="toggleDb(inst.id, db)" @mouseenter="hoverDb=inst.id+':'+db" @mouseleave="onDbMouseLeave(inst.id, db)">
-                  <span class="arrow" :class="{open: !!expandDbByConn[inst.id]?.[db]}" aria-hidden="true">›</span>
+                <div class="db-hd" @mouseenter="hoverDb=inst.id+':'+db" @mouseleave="onDbMouseLeave(inst.id, db)">
+                  <span class="arrow" :class="{open: !!expandDbByConn[inst.id]?.[db]}" aria-hidden="true" @click.stop="toggleDb(inst.id, db)">›</span>
                   <svg class="ico db" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3c-4.97 0-9 1.79-9 4v10c0 2.21 4.03 4 9 4s9-1.79 9-4V7c0-2.21-4.03-4-9-4zm0 2c3.87 0 7 .9 7 2s-3.13 2-7 2-7-.9-7-2 3.13-2 7-2zm0 6c3.87 0 7-.9 7-2v3c0 1.1-3.13 2-7 2s-7-.9-7-2V9c0 1.1 3.13 2 7 2zm0 7c-3.87 0-7-.9-7-2v-3c0 1.1 3.13 2 7 2s7-.9 7-2v3c0 1.1-3.13 2-7 2z"/></svg>
                   <span class="label" :title="db">{{ db }}</span>
                   <button
@@ -90,8 +90,8 @@
                 <ul v-show="expandDbByConn[inst.id]?.[db]" class="cats">
                   <!-- Tables 分类 -->
                   <li class="cat">
-                    <div class="cat-hd" @click="toggleDbCategory(inst.id, db, 'tables')">
-                      <span class="arrow" :class="{open: isDbCatOpen(inst.id, db, 'tables')}" aria-hidden="true">›</span>
+                    <div class="cat-hd">
+                      <span class="arrow" :class="{open: isDbCatOpen(inst.id, db, 'tables')}" aria-hidden="true" @click.stop="toggleDbCategory(inst.id, db, 'tables')">›</span>
                       <svg class="ico cat-tables" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 5h16v4H4V5zm0 5h16v4H4v-4zm0 5h16v4H4v-4z"/></svg>
                       <span class="label">Tables</span>
                     </div>
@@ -100,7 +100,7 @@
                         <div class="table-hd">
                           <span class="arrow" :class="{open: isTableOpen(inst.id, db, t)}" @click.stop="toggleTableCats(inst.id, db, t)" aria-hidden="true">›</span>
                           <svg class="ico tbl" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18v14H3V5zm2 2v2h14V7H5zm0 4v2h14v-2H5zm0 4v2h14v-2H5z"/></svg>
-                          <span class="label" @click.stop="toggleTableCats(inst.id, db, t)">{{ t }}</span>
+                          <span class="label">{{ t }}</span>
                           <div class="inline-actions" aria-label="表操作">
                             <button class="tb-act" title="新建查询" @click.stop="insertQuickQuery(db, t)">
                               <!-- 加号：表示为该表新建查询 -->
@@ -114,8 +114,8 @@
                         </div>
                         <!-- 每个表的子分类（列/索引/外键/触发器/事件） -->
                         <ul class="table-cats" v-show="isTableOpen(inst.id, db, t)">
-                          <li class="subcat" @click.stop="(ensurePrimaryColumns(inst.id, db, t), toggleTableColumns(inst.id, db, t))">
-                            <svg class="ico col" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2z"/></svg>
+                          <li class="subcat">
+                            <svg class="ico col" viewBox="0 0 24 24" aria-hidden="true" @click.stop="(ensurePrimaryColumns(inst.id, db, t), toggleTableColumns(inst.id, db, t))"><path fill="currentColor" d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2z"/></svg>
                             <span>Columns</span>
                           </li>
                           <ul v-show="isColumnsOpen(inst.id, db, t)" class="columns">
@@ -127,8 +127,8 @@
                             </li>
                             <li class="muted" v-if="!isColsLoading(inst.id, db, t) && getColumns(inst.id, db, t).length===0">无列</li>
                           </ul>
-                          <li class="subcat" @click.stop="toggleTableIndexes(inst.id, db, t)">
-                            <svg class="ico idx" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z"/></svg>
+                          <li class="subcat">
+                            <svg class="ico idx" viewBox="0 0 24 24" aria-hidden="true" @click.stop="toggleTableIndexes(inst.id, db, t)"><path fill="currentColor" d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z"/></svg>
                             <span>Indexes</span>
                           </li>
                           <ul v-show="isIndexesOpen(inst.id, db, t)" class="columns">
