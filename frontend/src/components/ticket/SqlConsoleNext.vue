@@ -30,6 +30,10 @@
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 20l8-4 8 4-8-18z"/></svg>
           <span>触发器</span>
         </button>
+        <button class="big-btn" title="命令行" @click="openCommandLine">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm3.7 3.3 2.9 2.9-2.9 2.9-1.4-1.4L7.8 11 6.3 9.5l1.4-1.2zM11 15h6v-2h-6v2z"/></svg>
+          <span>命令行</span>
+        </button>
       </div>
       <img class="brand" src="/dataverse_logo.png" alt="logo" title="星辰疆域，数据宇宙" />
       <div class="title" title="星辰疆域，数据宇宙">SQL控制台</div>
@@ -653,6 +657,22 @@ function metaLabel(key: string){
     Comment: '注释'
   }
   return map[key] || map[key?.toString()] || key
+}
+function openCommandLine(){
+  try {
+    // 预留：打开命令行页签/弹窗，这里先向编辑器插入提示命令
+    const sql = '-- 打开命令行: 输入 \! bash 或使用外部终端\n'
+    insertText(sql)
+  } catch {}
+}
+
+function insertText(text: string){
+  try{
+    if (!cmView) return
+    const tr = cmView.state.update({changes:{from: cmView.state.selection.main.anchor, to: cmView.state.selection.main.anchor, insert: text}})
+    cmView.dispatch(tr)
+    cmView.focus()
+  }catch{}
 }
 
 function copyText(text: string){
@@ -1843,8 +1863,7 @@ onUpdated(() => {
 .tq-pagination .icon-btn:hover{ background:#f8fafc; }
 
 .inspector{ border-left:1px solid #e5e7eb; background:#fff; display:flex; flex-direction:column; align-self:stretch; position: sticky; top: 0; height: 100%; max-height: 100%; overflow: auto; }
-.insp-resizer{ cursor: col-resize; width: 6px; margin-left: -3px; background: transparent; position: sticky; top: 0; height: 100%; align-self:stretch; }
-.insp-resizer:hover{ background: rgba(59,130,246,.2); }
+.insp-resizer{ cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><path d="M5 12 L11 6 M5 12 L11 18 M19 12 L13 6 M19 12 L13 18 M11 12 L13 12" stroke="%230b57d0" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>') 12 12, ew-resize; width: 6px; margin-left: -3px; background: transparent; position: sticky; top: 0; height: 100%; align-self:stretch; }
 .inspector-hd{ display:none; }
 .inspector-hd .mini{ width:24px; height:24px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; }
 .inspector-tabs{ display:flex; gap:8px; padding:6px 10px; border-bottom:1px solid #e5e7eb; position: sticky; top: 0; background:#fff; z-index:1; align-items:center; }
