@@ -43,13 +43,18 @@
     <aside class="left">
         <div class="tree" role="tree">
           <div class="inst" v-for="inst in instances" :key="'i-'+inst.id">
-            <div class="inst-hd" :class="{selected: isSelectedInst(inst.id)}" @mouseenter="hoverInst=inst.id" @mouseleave="hoverInst=''">
-              <span class="arrow" :class="{open: expandConn[inst.id]}" aria-hidden="true" @click.stop="toggleConn(inst.id)">›</span>
+            <div class="inst-hd" :class="{selected: isSelectedInst(inst.id), inactive: !isConnActive(inst.id)}" @mouseenter="hoverInst=inst.id" @mouseleave="hoverInst=''">
+              <span class="arrow" :class="{open: expandConn[inst.id], disabled: !isConnActive(inst.id)}" aria-hidden="true" @click.stop="toggleConn(inst.id)">›</span>
               <svg class="ico inst" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 4h18v8H3V4zm2 2v4h14V6H5zm-2 8h18v6H3v-6zm2 2v2h6v-2H5zm8 0v2h6v-2h-6z"/></svg>
-              <span class="label" :title="inst.ip + ':' + inst.port" @click.stop="(selectInst(inst.id), openInspectorInstance(inst.id))">
+              <span class="label" :title="inst.ip + ':' + inst.port" @dblclick.stop="activateConn(inst.id)" @click.stop="(selectInst(inst.id), openInspectorInstance(inst.id))">
                 {{ inst.description || (inst.ip + ':' + inst.port) || ('#' + inst.id) }}
               </span>
-              <button v-show="hoverInst===inst.id || hasInstFilter(inst.id)" class="mini filter" :class="{ active: hasInstFilter(inst.id) }" title="选择实例库" @click.stop="openInstFilter(inst, $event)">⚙</button>
+              <button v-show="hoverInst===inst.id || hasInstFilter(inst.id)" class="mini connect" :class="{ on: isConnActive(inst.id) }" :title="isConnActive(inst.id) ? '关闭连接' : '打开连接'" @click.stop="toggleConnActive(inst.id)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 11h10v2H7v-2zm0-5h10v2H7V6zm0 10h7v2H7v-2z"/></svg>
+              </button>
+              <button v-show="hoverInst===inst.id || hasInstFilter(inst.id)" class="mini filter" :class="{ active: hasInstFilter(inst.id), disabled: !isConnActive(inst.id) }" :disabled="!isConnActive(inst.id)" title="选择实例库" @click.stop="openInstFilter(inst, $event)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 2a6 6 0 0 1 6 6c0 1.44-.5 2.76-1.33 3.8l5.27 5.27-1.41 1.41-5.27-5.27A5.98 5.98 0 0 1 10 14a6 6 0 1 1 0-12zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+              </button>
             </div>
             <!-- 实例库过滤面板（按钮同水平位置显示，包含搜索框；鼠标移出自动关闭） -->
             <div
@@ -74,16 +79,18 @@
             <ul v-show="expandConn[inst.id]" class="dbs">
               <li class="db" v-for="db in filteredDbList(inst.id)" :key="'db-'+inst.id+'-'+db">
                 <div class="db-hd" :class="{selected: isSelectedDb(inst.id, db)}" @mouseenter="hoverDb=inst.id+':'+db" @mouseleave="onDbMouseLeave(inst.id, db)">
-                  <span class="arrow" :class="{open: !!expandDbByConn[inst.id]?.[db]}" aria-hidden="true" @click.stop="toggleDb(inst.id, db)">›</span>
+                  <span class="arrow" :class="{open: !!expandDbByConn[inst.id]?.[db], disabled: !isDbActivated(inst.id, db)}" aria-hidden="true" @click.stop="toggleDb(inst.id, db)">›</span>
                   <svg class="ico db" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3c-4.97 0-9 1.79-9 4v10c0 2.21 4.03 4 9 4s9-1.79 9-4V7c0-2.21-4.03-4-9-4zm0 2c3.87 0 7 .9 7 2s-3.13 2-7 2-7-.9-7-2 3.13-2 7-2zm0 6c3.87 0 7-.9 7-2v3c0 1.1-3.13 2-7 2s-7-.9-7-2V9c0 1.1 3.13 2 7 2zm0 7c-3.87 0-7-.9-7-2v-3c0 1.1 3.13 2 7 2s7-.9 7-2v3c0 1.1-3.13 2-7 2z"/></svg>
-                  <span class="label" :title="db" @click.stop="(selectDb(inst.id, db), openInspectorDatabase(inst.id, db))">{{ db }}</span>
+                  <span class="label" :title="db" @dblclick.stop="activateDb(inst.id, db)" @click.stop="(selectDb(inst.id, db), openInspectorDatabase(inst.id, db))">{{ db }}</span>
                   <button
                     v-show="hoverDb===inst.id+':'+db || !!dbFilterTextByKey[keyOf(inst.id, db)] || dbFilterVisibleKey===keyOf(inst.id, db)"
                     class="mini filter"
                     :class="{ active: !!dbFilterTextByKey[keyOf(inst.id, db)] }"
                     :title="dbFilterTextByKey[keyOf(inst.id, db)] ? '已过滤：' + dbFilterTextByKey[keyOf(inst.id, db)] : '过滤该库的表'"
                     @click.stop="showDbFilterPopup(inst.id, db, $event)"
-                  >🔍</button>
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M10 2a6 6 0 0 1 6 6c0 1.44-.5 2.76-1.33 3.8l5.27 5.27-1.41 1.41-5.27-5.27A5.98 5.98 0 0 1 10 14a6 6 0 1 1 0-12zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+                  </button>
                   <input v-if="dbFilterVisibleKey==='__inline__never__'" class="db-filter-input" />
                 </div>
                 <!-- 数据库展开后的分类菜单 -->
@@ -193,12 +200,23 @@
         <div class="gsearch">
           <div class="searchbox">
             <span class="ico" aria-hidden="true">
-              <!-- 放大镜图标，Navicat 风格 -->
-              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16a6.471 6.471 0 0 0 4.23-1.57l.27.28v.79l5 5 1.5-1.5-5-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.505 4.505 0 0 1 9.5 14z"/></svg>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M10 2a6 6 0 0 1 6 6c0 1.44-.5 2.76-1.33 3.8l5.27 5.27-1.41 1.41-5.27-5.27A5.98 5.98 0 0 1 10 14a6 6 0 1 1 0-12zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
             </span>
-            <input v-model.trim="globalDbSearch" placeholder="搜索" />
-            <button class="mini action" title="清除所有过滤" @click="clearAllDbFilters">🧹</button>
-            <button class="mini action" title="折叠菜单" @click="collapseAllDbs">📂</button>
+            <div class="chips">
+              <span class="chip" v-for="(t,i) in globalSearchTokens" :key="'chip-'+i">
+                <span class="t">{{ t }}</span>
+                <button class="x" title="移除" @click="removeSearchToken(i)">×</button>
+              </span>
+            </div>
+            <input v-model.trim="globalDbSearch" @keydown.space.prevent="addTokenFromInput" @keyup.enter.prevent="addTokenFromInput" :placeholder="(globalSearchTokens.length || globalDbSearch) ? '' : '支持多条件，以空格间隔'" />
+            <div class="actions">
+              <button class="mini action" title="清除所有过滤" @click="clearAllDbFilters">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3V6zm2 4h14l-4 8H9l-4-8zm6-8h2v2h-2V2z"/></svg>
+              </button>
+              <button class="mini action" title="折叠所有" @click="collapseAllDbs">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 10h16v2H4v-2zm0 5h10v2H4v-2zM4 5h16v2H4V5z"/></svg>
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -451,7 +469,10 @@ const tablesLoading = reactive<Record<string, boolean>>({})
 const selectedDbByConn = reactive<Record<string|number, Set<string>>>({})
 // 数据库内分类展开状态：tables/views/functions/procedures/events
 const dbCatOpen = reactive<Record<string, Record<string, Record<string, boolean>>>>({}) // dbCatOpen[connId][db][cat] = bool
-function isDbCatOpen(id:any, db:string, cat:string){ return !!dbCatOpen[id]?.[db]?.[cat] }
+function isDbCatOpen(id:any, db:string, cat:string){
+  // 允许手动展开/折叠；搜索时不会自动打开，但不阻止用户点击打开
+  return !!dbCatOpen[id]?.[db]?.[cat]
+}
 function toggleDbCategory(id:any, db:string, cat:string){ if (!dbCatOpen[id]) dbCatOpen[id] = {}; if (!dbCatOpen[id][db]) dbCatOpen[id][db] = {}; dbCatOpen[id][db][cat] = !dbCatOpen[id][db][cat] }
 
 // 列展开与缓存
@@ -599,7 +620,7 @@ async function openInspector(id:any, db:string, tbl:string){
   inspectorLast.value = { id, db, tbl }
   inspectorTab.value = 'meta'
   inspectorTitle.value = `${db}.${tbl}`
-  inspectorDDL.value = '加载中...'
+  inspectorDDL.value = ''
   for (const k in inspectorMeta) delete (inspectorMeta as any)[k]
   try {
     const [{ data: ddl }, { data: meta }] = await Promise.all([
@@ -668,6 +689,88 @@ const dbFilterVisibleKey = ref<string>('')
 const dbFilterPopup = reactive<{ show:boolean; left:number; top:number; key:string }>({ show:false, left:0, top:0, key:'' })
 const popupHover = ref(false)
 const leftWidth = ref(270)
+// 全局搜索（多条件）
+const globalSearchTokens = ref<string[]>([])
+function addTokenFromInput(){
+  const s = (globalDbSearch.value || '').trim()
+  if (!s) return
+  const tokens = s.split(/\s+/).filter(Boolean)
+  for (const t of tokens) globalSearchTokens.value.push(t)
+  globalDbSearch.value = ''
+  expandMatchesByTokens()
+}
+function removeSearchToken(i:number){ globalSearchTokens.value.splice(i,1); expandMatchesByTokens() }
+function clearSearchTokens(){ globalSearchTokens.value = []; globalDbSearch.value=''; expandMatchesByTokens() }
+async function expandMatchesByTokens(){
+  try{
+    const tokens = globalSearchTokens.value.map(t=>t.toLowerCase()).filter(Boolean)
+    // 无条件时不做展开/折叠
+    if (!tokens.length) return
+    // 确保所有激活实例已加载库列表
+    const loadPromises: Promise<any>[] = []
+    for (const id in activeConnSet) {
+      if (isConnActive(id) && !Array.isArray(dbsByConn[id])) loadPromises.push(loadDatabasesByConn(id))
+    }
+    try { await Promise.all(loadPromises) } catch {}
+    // 先全部收起
+    for (const id in dbsByConn) {
+      if (isConnActive(id)) {
+        expandConn[id] = false
+        // 重置库展开状态与分类展开状态，避免上一次匹配残留
+        expandDbByConn[id] = {}
+        dbCatOpen[id] = {}
+      }
+    }
+    // OR 匹配：任一条件命中即匹配
+    for (const id in dbsByConn) {
+      if (!isConnActive(id)) continue
+      const dbs = dbsByConn[id] || []
+      let anyHit = false
+      if (!expandDbByConn[id]) expandDbByConn[id] = {}
+      for (const db of dbs) {
+        const name = String(db).toLowerCase()
+        const ok = tokens.some(t => name.includes(t))
+        // 搜索时仅显示到库级，不展开库下分类
+        expandDbByConn[id][db] = false
+        // 命中库不展开二级分类
+        if (!dbCatOpen[id]) dbCatOpen[id] = {}
+        if (!dbCatOpen[id][db]) dbCatOpen[id][db] = { tables:false, views:false, functions:false, procedures:false, events:false }
+        else {
+          dbCatOpen[id][db].tables = false
+          dbCatOpen[id][db].views = false
+          dbCatOpen[id][db].functions = false
+          dbCatOpen[id][db].procedures = false
+          dbCatOpen[id][db].events = false
+        }
+        if (ok) anyHit = true
+      }
+      // 仅当存在搜索条件时展开实例；否则保持不变
+      if (tokens.length && anyHit) expandConn[id] = true
+    }
+  }catch{}
+}
+
+// 当搜索条件或输入发生变化时，立即重新计算展开状态（解决强刷后子菜单仍展开）
+watch([globalSearchTokens, globalDbSearch], () => {
+  try { expandMatchesByTokens() } catch {}
+}, { immediate: true })
+
+function activateConn(id:any){ activeConnSet[id] = true; expandConn[id] = true; loadDatabasesByConn(id) }
+function isDbActivated(id:any, db:string){ return !!expandConn[id] }
+function activateDb(id:any, db:string){ if (!expandDbByConn[id]) expandDbByConn[id] = {}; expandDbByConn[id][db] = true }
+const activeConnSet = reactive<Record<string|number, boolean>>({})
+function isConnActive(id:any){ return !!activeConnSet[id] }
+function toggleConnActive(id:any){
+  const now = !!activeConnSet[id]
+  if (now) {
+    activeConnSet[id] = false
+    expandConn[id] = false
+    try { if (expandDbByConn[id]) expandDbByConn[id] = {} } catch {}
+  } else {
+    activeConnSet[id] = true
+    activateConn(id)
+  }
+}
 
 // 右侧
 const editorWrapRef = ref<HTMLElement|null>(null)
@@ -738,7 +841,7 @@ const inspectorKind = ref<'table'|'database'|'instance'|'column'|'index'>('table
 const inspectorDDL = ref('')
 const inspectorMeta = reactive<Record<string, any>>({})
 const inspectorTitle = ref('')
-const inspectorWidth = ref(360)
+const inspectorWidth = ref(260)
 
 // 元数据字段中文映射（精简常见字段；未知字段原样返回）
 function metaLabel(key: string){
@@ -866,7 +969,7 @@ async function loadObjectList(){
 async function selectObject(name:string){
   objectSelected.value = name
   ovTab.value = 'ddl'
-  ovDDL.value = '加载中...'
+  ovDDL.value = ''
   for (const k in ovMeta) delete (ovMeta as any)[k]
   try{
     const db = activeDatabase.value || currentDb.value || ''
@@ -1214,7 +1317,21 @@ function filterInstDbs(id:any){
 }
 function isDbSelected(id:any, db:string){ return !!selectedDbByConn[id]?.has(db) }
 function onDbSelect(id:any, db:string, ev:Event){ const on=(ev.target as HTMLInputElement).checked; if(!selectedDbByConn[id]) selectedDbByConn[id]=new Set<string>(); if(on) selectedDbByConn[id].add(db); else selectedDbByConn[id].delete(db) }
-function filteredDbList(id:any){ const all = dbsByConn[id]||[]; const sel=selectedDbByConn[id]; const tokens=(globalDbSearch.value||'').trim().toLowerCase().split(/\s+/).filter(Boolean); return all.filter(db=>{ if(sel&&sel.size>0&&!sel.has(db)) return false; if(!tokens.length) return true; const s=db.toLowerCase(); return tokens.some(t=>s.includes(t)) }) }
+function filteredDbList(id:any){
+  const all = dbsByConn[id] || []
+  const sel = selectedDbByConn[id]
+  // 优先使用已确认的 token 列表；若无，则回退到输入框临时内容
+  const tokensSrc = (globalSearchTokens.value && globalSearchTokens.value.length)
+    ? globalSearchTokens.value
+    : ((globalDbSearch.value || '').trim().toLowerCase().split(/\s+/).filter(Boolean))
+  const tokens = (tokensSrc || []).map(t => String(t).toLowerCase())
+  return all.filter(db => {
+    if (sel && sel.size > 0 && !sel.has(db)) return false
+    if (!tokens.length) return true
+    const s = String(db).toLowerCase()
+    return tokens.some(t => s.includes(t))
+  })
+}
 // 保留旧方法名：为了兼容引用，如有调用则改为展示浮层
 function openDbFilter(id:any, db:string){ showDbFilterPopup(id, db) }
 // 改为行内输入：显示输入框并保持图标可见
@@ -1295,6 +1412,9 @@ function clearAllDbFilters(){
   for (const k of Object.keys(dbFilterTextByKey)) delete dbFilterTextByKey[k]
   dbFilterPopup.show = false
   dbFilterVisibleKey.value = ''
+  // 同时清除全局搜索条件与输入
+  try { globalSearchTokens.value = [] } catch {}
+  try { globalDbSearch.value = '' } catch {}
   // 同时清除"实例级别的库选择过滤"（全局清理）
   try {
     for (const id in selectedDbByConn) {
@@ -1302,6 +1422,22 @@ function clearAllDbFilters(){
       if (set && typeof set.clear === 'function') set.clear()
     }
   } catch {}
+  // 折叠所有展开状态（实例、库、分类）
+  try {
+    for (const id in expandConn) expandConn[id] = false
+    for (const id in expandDbByConn) {
+      const m = expandDbByConn[id]; if (m) for (const db in m) m[db] = false
+    }
+    for (const id in dbCatOpen) {
+      const byDb = dbCatOpen[id]; if (!byDb) continue
+      for (const db in byDb) {
+        const cats = byDb[db]; if (!cats) continue
+        cats.tables=false; cats.views=false; cats.functions=false; cats.procedures=false; cats.events=false
+      }
+    }
+  } catch {}
+  // 重新计算展开（此时应全部收起）
+  try { expandMatchesByTokens() } catch {}
 }
 function collapseAllDbs(){
   // 折叠到实例级：关闭所有实例与其下数据库展开
@@ -1309,6 +1445,16 @@ function collapseAllDbs(){
   for (const id in expandDbByConn) {
     const m = expandDbByConn[id]
     if (m) for (const db in m) m[db] = false
+  }
+  // 同步折叠所有数据库下分类，防止按钮失效
+  for (const id in dbCatOpen) {
+    const byDb = dbCatOpen[id]
+    if (!byDb) continue
+    for (const db in byDb) {
+      const cats = byDb[db]
+      if (!cats) continue
+      cats.tables = false; cats.views = false; cats.functions = false; cats.procedures = false; cats.events = false
+    }
   }
   instFilterVisible.value = ''
 }
@@ -1627,7 +1773,19 @@ watchEffect(() => {
 function exportCSV(){ try{ if(!result.value || result.value.type!=='table') return; const cols = result.value.columns||[]; const rows = result.value.data||[]; const esc=(s:any)=>`"${String(s??'').replace(/"/g,'""')}"`; const lines = [cols.map(esc).join(',')].concat(rows.map((r:any)=> cols.map(c=>esc(r?.[c])).join(','))); const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' }); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='query.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000) } catch{} }
 function exportExcel(){ try{ if(!result.value || result.value.type!=='table') return; const cols = result.value.columns||[]; const rows = result.value.data||[]; const html = `<table>${['<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr>'].concat(rows.map((r:any)=>'<tr>'+cols.map(c=>`<td>${r?.[c]??''}</td>`).join('')+'</tr>')).join('')}</table>`; const blob = new Blob([`\ufeff${html}`], { type: 'application/vnd.ms-excel' }); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='query.xls'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000) } catch{} }
 
-onMounted(async()=>{ await loadConnections(); await loadConnInfo(); if (instances.value.length && connId.value) { expandConn[connId.value]=true; await loadDatabasesByConn(connId.value) } })
+onMounted(async()=>{
+  await loadConnections();
+  await loadConnInfo();
+  // 默认仅激活 URL 指定实例：展开该实例并加载其库；其他实例保持关闭（不显示箭头）
+  try {
+    if (connId.value) {
+      Object.keys(activeConnSet).forEach(k=> delete (activeConnSet as any)[k])
+      activeConnSet[connId.value] = true
+      expandConn[connId.value] = true
+      await loadDatabasesByConn(connId.value)
+    }
+  } catch {}
+})
 // ====== 挂载 CodeMirror，高亮与联想 ======
 onMounted(()=>{
   const host = editorRef.value
@@ -1861,11 +2019,20 @@ onUpdated(() => {
 .inst-hd:hover,.db-hd:hover{ background:#eef2ff; }
 .arrow{ display:inline-block; width:10px; color:#64748b; }
 .arrow.open{ transform:rotate(90deg); }
+.arrow.disabled{ opacity:.4; pointer-events:none; }
 .ico{ width:14px; height:14px; color:#60a5fa; flex:0 0 auto; }
 .ico.inst{ color:#34d399 }
+.inst-hd.inactive{ background:transparent; }
+.inst-hd.inactive .ico.inst, .inst-hd.inactive .label{ color:#94a3b8 }
 .ico.db{ color:#60a5fa }
 .ico.tbl{ color:#93c5fd; margin-right:4px }
-.mini{ display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border:1px solid #cbd5e1; border-radius:4px; background:#fff; color:#334155; position:absolute; right:6px; top:4px; }
+.mini{ display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border:0; border-radius:6px; background:transparent; color:#334155; position:absolute; top:50%; transform:translateY(-50%); box-shadow:none; line-height:0; }
+.mini.filter{ right:6px; }
+.mini.connect{ right:30px; }
+.mini.connect svg, .mini.filter svg{ width:20px; height:20px; display:block; }
+.mini.connect.on{ background:transparent; }
+.mini:hover{ background:rgba(0,0,0,.04); }
+.mini.disabled{ opacity:.5; cursor:not-allowed; }
 .mini.filter.active{ background:#e6f0ff; border-color:#93c5fd; color:#0b57d0; }
 /* 库级过滤输入：与库名同一行，显示在库名右侧，不覆盖库名 */
 .db-filter-input{ position:static; margin-left:6px; height:22px; border:1px solid #cbd5e1; border-radius:4px; padding:0 6px; font-size:12px; min-width:140px; }
@@ -1928,13 +2095,17 @@ onUpdated(() => {
 .panel .phd{ display:flex; align-items:center; justify-content:space-between; padding:6px 8px; border-bottom:1px solid #e5e7eb; color:#0b57d0; font-weight:600; }
 .panel .plist{ max-height:220px; overflow:auto; padding:6px 8px; }
 .panel .opt{ display:block; padding:4px 6px; }
-.gsearch{ border-top:0; padding:6px 8px; flex:0 0 auto; }
-.gsearch .searchbox{ position: relative; }
+.gsearch{ border-top:0; padding:6px 0 6px 8px; flex:0 0 auto; }
+.gsearch .searchbox{ position: relative; padding-right: 0; }
 .gsearch .searchbox .ico{ position:absolute; left:8px; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:14px; }
-.gsearch .searchbox input{ width:100%; height:26px; padding:4px 56px 4px 28px; border:0; border-radius:0; outline:none; box-shadow:none; background:#f8fafc; }
+.gsearch .searchbox .chips{ position:absolute; left:28px; right:48px; top:50%; transform:translateY(-50%); display:flex; gap:4px; flex-wrap:wrap; pointer-events:none; }
+.gsearch .searchbox .chip{ position:relative; display:inline-flex; align-items:center; gap:4px; background:#eef2ff; color:#0f172a; border-radius:10px; padding:1px 14px 1px 6px; font-size:12px; line-height:16px; pointer-events:auto; }
+.gsearch .searchbox .chip .x{ position:absolute; right:2px; top:2px; width:12px; height:12px; font-size:10px; line-height:12px; background:transparent; border:0; color:#64748b; cursor:pointer; padding:0; }
+.gsearch .searchbox input{ width:100%; height:24px; padding:2px 48px 2px 28px; border:0; border-radius:0; outline:none; box-shadow:none; background:#f8fafc; font-size:12px; }
 .gsearch .searchbox input:focus{ border:0; box-shadow:none; }
-.gsearch .searchbox .action{ position:absolute; top:50%; transform:translateY(-50%); right:8px; width:24px; height:24px; border:0; border-radius:6px; background:transparent; color:#334155; cursor:pointer; margin-left:4px; }
-.gsearch .searchbox .action + .action{ right:36px; }
+.gsearch .searchbox .actions{ position:absolute; top:0; bottom:0; right:0; display:flex; align-items:center; gap:1px; padding-right:0; }
+.gsearch .searchbox .action{ position:static !important; top:auto !important; transform:none !important; width:22px; height:22px; border:0; border-radius:0; background:transparent; color:#334155; cursor:pointer; margin:0; box-shadow:none; }
+.gsearch .searchbox .action svg{ width:18px; height:18px; display:block; color:#111; }
 .vsplit{ background:transparent; position:relative; cursor:col-resize; }
 .vsplit::before{ content:""; position:absolute; left:2px; top:0; bottom:0; width:2px; background:#e5e7eb; }
 .vsplit:hover::before{ background:#cbd5e1; }
@@ -2057,7 +2228,7 @@ onUpdated(() => {
 .inspector-tabs .icon-btn{ width:28px; height:28px; border:1px solid #cbd5e1; border-radius:6px; background:#fff; color:#334155; display:inline-flex; align-items:center; justify-content:center; }
 .inspector-tabs .icon-btn.active{ background:#e6f0ff; border-color:#93c5fd; color:#0b57d0; }
 .inspector-tabs .icon-btn.close{ border-color:#fecaca; color:#b91c1c; }
-.inspector-body{ padding:10px; overflow:auto; }
+.inspector-body{ padding:10px; overflow:auto; display:flex; flex-direction:column; }
 .inspector-body .ddl{ white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px; line-height: 1.5; }
 .inspector-body.meta{ padding:12px 14px; }
 .inspector-body .meta-head{ display:flex; align-items:center; gap:10px; padding-bottom:8px; border-bottom:1px solid #e5e7eb; margin-bottom:10px; }
@@ -2075,7 +2246,8 @@ onUpdated(() => {
 .inspector-body .meta-grid{ display:grid; grid-template-columns: 120px 1fr; row-gap:6px; column-gap:12px; padding-top:4px; }
 .inspector-body .meta-grid .label{ color:#64748b; font-family: "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; font-size:13px; }
 .inspector-body .meta-grid .val{ color:#111827; word-break: break-all; font-family: "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; font-size:13px; }
-.cm-ddl :deep(.cm-editor){ height:auto; border:1px solid #e5e7eb; border-radius:6px; background:#fff; }
+.cm-ddl{ flex:1 1 auto; display:flex; flex-direction:column; }
+.cm-ddl :deep(.cm-editor){ flex:1 1 auto; height:100%; border:1px solid #e5e7eb; border-radius:6px; background:#fff; }
 .cm-ddl :deep(.cm-scroller){ overflow:auto; }
 .meta-item{ display:flex; gap:8px; padding:4px 0; font-size:13px; }
 .meta-item .k{ color:#64748b; min-width:140px; }
