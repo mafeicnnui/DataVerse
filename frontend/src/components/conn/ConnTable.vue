@@ -196,8 +196,8 @@ function openNextStandalone(item) {
   try {
     const id = item?.id
     if (!id) return
-    // 指向 Next 版独立页（按需求使用固定 IP 端口）
-    const url = `${location.protocol}//10.16.45.135:5173/db-console-next.html?connId=${encodeURIComponent(id)}`
+    // 指向 Next 版独立页（使用同源相对路径，避免硬编码主机与端口）
+    const url = `/db-console-next.html?connId=${encodeURIComponent(id)}`
     window.open(url, '_blank')
   } catch {}
 }

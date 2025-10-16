@@ -744,14 +744,15 @@ html, body, #app { height: 100%; }
 .console-window.collapsed .side-body { display: none !important; }
 .search { position: relative; }
 .search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94a3b8; display: inline-flex; align-items: center; }
-.search input { width: 100%; height: 30px; border: 1px solid #e5e7eb; border-radius: 6px; padding: 0 8px 0 34px; background: #ffffff; color: #0f172a; }
+/* 放大搜索框字体 */
+.search input { width: 100%; height: 30px; border: 1px solid #e5e7eb; border-radius: 6px; padding: 0 8px 0 34px; background: #ffffff; color: #0f172a; font-size: 13px; }
 .tree { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 /* 压缩组头高度与内边距，使整体更紧凑 */
 .group-header { padding: 6px 10px; min-height: 28px; }
 /* 组图标与名称更贴近，减少占位 */
 .group-header .gicon { width: 16px; height: 16px; margin-right: 6px; }
-/* 一级菜单字体：取消粗体，字号减 1 */
-.group-header .gname { font-weight: 400; font-size: 11px; }
+/* 一级菜单字体：提升字号至 13px，阅读更清晰 */
+.group-header .gname { font-weight: 500; font-size: 13px; }
 /* 侧栏宽度 220px，提供可调缩进变量（可按需微调） */
 .sidebar { flex: 0 0 230px; width: 230px; flex-shrink: 0; --tree-indent: 28px; }
 /* 折叠按钮定位到主机菜单右边框中部 */
@@ -772,9 +773,10 @@ html, body, #app { height: 100%; }
 .group .tree li.host-item{ display:flex; align-items:center; gap:6px; height:20px; padding:0 8px; border-radius:6px; cursor:pointer; position:relative; }
 .tree li:hover { background: #eef2ff; }
 .ip-icon { display: inline-flex; width: 12px; height: 12px; margin-right: 6px; }
-.ip.link { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-weight: 400; color: #2563eb; font-size: 12px; }
+/* 放大二级 IP 字体 */
+.ip.link { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-weight: 500; color: #2563eb; font-size: 13px; }
 /* 强制二级菜单 IP 使用正常字重，避免被其它规则覆盖 */
-.group .tree li .ip, .group .tree li .ip.link { font-weight: 400 !important; }
+.group .tree li .ip, .group .tree li .ip.link { font-weight: 500 !important; }
 .pane { position: absolute; inset: 0; display: flex; flex-direction: column; }
 /* Tab 标题区改为浅色，与系统主菜单一致，并加入横向滚动箭头 */
 .tabs-bar { position: relative; display: flex; align-items: center; gap: 6px; padding: 6px; background: #f5f7ff; border-bottom: 1px solid #e5e7eb; min-height: 36px; }

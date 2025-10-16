@@ -497,6 +497,13 @@ onMounted(async () => {
             '.cm-scroller': { overflow: 'auto' },
             '.cm-content': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 'var(--dv-font-mono, 13px)', lineHeight: '1.6' },
           }),
+          // 实时镜像选中文本，供执行函数优先使用
+          EditorView.updateListener.of((update: any) => {
+            try {
+              const sel = update.state.sliceDoc(update.state.selection.main.from, update.state.selection.main.to)
+              ;(globalThis as any).__tq_sql_sel = sel
+            } catch {}
+          }),
         ]
       })
       const view = new EditorView({ state, parent: root })

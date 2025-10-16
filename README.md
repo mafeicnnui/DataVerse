@@ -225,7 +225,7 @@ $env:DATABASE_URL = "mysql+aiomysql://puppet:Puppet%40123@10.2.39.59:3306/db_exp
 python -m venv .venv
 . .venv\Scripts\Activate.ps1
 
-# 安装依赖
+# 安装依赖（已补充 greenlet/asyncio 相关可选依赖）
 pip install -r backend/requirements.txt
 
 # 启动后端（指定 app-dir，便于在项目根目录直接运行）
@@ -257,7 +257,7 @@ export DATABASE_URL="mysql+aiomysql://puppet:Puppet%40123@10.2.39.59:3306/db_exp
 python3 -m venv .venv
 source .venv/bin/activate
 
-# 安装依赖
+# 安装依赖（已补充 greenlet/asyncio 相关可选依赖）
 pip install -r backend/requirements.txt
 
 # 启动后端（指定 app-dir，便于在项目根目录直接运行）

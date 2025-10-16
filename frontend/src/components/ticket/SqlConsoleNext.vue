@@ -1051,8 +1051,18 @@ onBeforeUnmount(() => {
 const page = ref(1)
 const pageSize = ref(50)
 const totalRows = ref(0)
+const unknownTotal = ref(false)
+const backendPaged = ref(false)
 const pageInput = ref(1)
-const totalPages = computed(()=>{ const t=Number(totalRows.value||0); const ps=Number(pageSize.value||1); return Math.max(1, Math.ceil(t/Math.max(1,ps))) })
+const totalPages = computed(()=>{
+  const ps = Math.max(1, Number(pageSize.value||1))
+  if (unknownTotal.value) return Math.max(1, Number(page.value||1) + 1)
+  const t = Math.max(0, Number(totalRows.value||0))
+  const pages = Math.max(1, Math.ceil(t/ps))
+  // 若后端支持分页（pageEcho/pageSizeEcho），但当前页超出总页数，仍允许显示当前页用于“无 total 的更多”场景
+  if (backendPaged.value && page.value > pages) return page.value
+  return pages
+})
 // 视图/选择/编辑状态
 const viewMode = ref<'grid'|'form'>('grid')
 const selectedRowIndex = ref<number>(-1)
@@ -1524,8 +1534,26 @@ function appendSnip(instId:any, db:string, tbl:string){
  */
 async function exec(){
   const wasInspectorVisible = inspectorVisible.value
-  const txtGlobal = (globalThis as any).__next_sql_text
-  const sql = (typeof txtGlobal==='string' && txtGlobal.trim()) ? txtGlobal : ''
+  function pickSql(): string{
+    // 1) 选中文本（来自编辑器更新镜像）
+    try { const sel = (globalThis as any).__tq_sql_sel; if (typeof sel==='string' && sel.trim()) return sel } catch {}
+    // 2) 直接从编辑器读取选区（避免镜像未及时刷新）
+    try {
+      if (cmView && cmView.state) {
+        const rng: any = cmView.state.selection?.main
+        if (rng && (rng.to > rng.from)) {
+          const txt = cmView.state.sliceDoc(rng.from, rng.to)
+          if (txt && String(txt).trim()) return String(txt)
+        }
+      }
+    } catch {}
+    // 3) fallback: 浏览器选区（contenteditable 模式）
+    try { const raw = (window.getSelection && window.getSelection()?.toString()) || ''; if (raw && raw.trim()) return raw } catch {}
+    // 4) 全量文本
+    try { const all = (globalThis as any).__tq_sql_text || (globalThis as any).__next_sql_text || ''; if (String(all).trim()) return String(all) } catch {}
+    return ''
+  }
+  const sql = pickSql()
   if(!sql) return
   // 若已有执行在进行，则直接返回，防止并发执行
   if (running.value) return
@@ -1541,22 +1569,40 @@ async function exec(){
     const useConn = ctx?.connId ?? connId.value
     const useDb = ctx?.database || currentDb.value
     const payload:any = { connId: useConn, sql, page: page.value, pageSize: pageSize.value }
-    try { if (/\blimit\b/i.test(sql)) payload.respectInnerLimit = true } catch {}
+    // 明确告诉后端不要遵从 SQL 里的 LIMIT，由 page/pageSize 统一控制
+    try { (payload as any).respectInnerLimit = false } catch {}
     if (useDb) payload.database = useDb
     const {data}=await api.post('/ticket/execute', payload, { signal: (currentAbort as any)?.signal })
     if (data && Array.isArray(data.data) && Array.isArray(data.columns)) {
       result.value={ type:'table', data:data.data, columns:data.columns }
-      totalRows.value = Number(data.total || data.count || data.totalRows || data.data.length || 0)
+      const tot = Number((data as any).total || (data as any).count || (data as any).totalRows || 0)
+      if (tot > 0) { totalRows.value = tot; unknownTotal.value = false }
+      else { unknownTotal.value = true }
+      backendPaged.value = !!((data as any).pageEcho || (data as any).pageSizeEcho || (data as any).total || (data as any).totalRows)
       pageInput.value = page.value
     } else if (Array.isArray(data)) {
       const cols = data.length ? Object.keys(data[0]) : []
       result.value={ type:'table', data, columns: cols }
-      totalRows.value = data.length
+      totalRows.value = data.length; unknownTotal.value = true; backendPaged.value = false
       pageInput.value = page.value
     } else if (data && Array.isArray(data.rows) && Array.isArray(data.columns)) {
       result.value={ type:'table', data:data.rows, columns:data.columns }
-      totalRows.value = Number(data.total || data.count || data.rows.length || 0)
-      pageInput.value = page.value
+      const tot = Number((data as any).totalRows || (data as any).total || (data as any).count || (data as any).rows?.length || 0)
+      if (tot > 0) { totalRows.value = tot; unknownTotal.value = false } else { unknownTotal.value = true }
+      backendPaged.value = true
+      // 若后端回显页码/每页，则同步本地状态，避免 UI 仍显示上一页
+      try { const pEcho = Number((data as any).pageEcho); if (pEcho > 0) { page.value = pEcho; pageInput.value = pEcho } else { pageInput.value = page.value } } catch { pageInput.value = page.value }
+      try { const psEcho = Number((data as any).pageSizeEcho); if (psEcho > 0) pageSize.value = psEcho } catch {}
+    } else if (data && Array.isArray((data as any).rows)) {
+      // rows 存在但 columns 缺失时，动态从第一行推导列
+      const rows:any[] = (data as any).rows || []
+      const cols:string[] = rows.length ? Object.keys(rows[0]) : []
+      result.value = { type: 'table', data: rows, columns: cols }
+      const tot = Number((data as any).totalRows || (data as any).total || (data as any).count || rows.length || 0)
+      if (tot > 0) { totalRows.value = tot; unknownTotal.value = false } else { unknownTotal.value = true }
+      backendPaged.value = true
+      try { const pEcho = Number((data as any).pageEcho); if (pEcho > 0) { page.value = pEcho; pageInput.value = pEcho } else { pageInput.value = page.value } } catch { pageInput.value = page.value }
+      try { const psEcho = Number((data as any).pageSizeEcho); if (psEcho > 0) pageSize.value = psEcho } catch {}
     } else if (typeof data==='string') {
       result.value={ type:'text', text:data }
     } else if (data && (data.message || data.text)) {
@@ -2202,16 +2248,16 @@ onUpdated(() => {
 .tq-pagination .icon-btn{ width:28px; height:28px; border:1px solid #e5e7eb; border-radius:10px; background:#fff; color:#0b57d0; cursor:pointer; }
 .tq-pagination .icon-btn:hover{ background:#f8fafc; }
 /* 新Navicat风格底栏（左侧数据操作 + 右侧分页/视图） */
-.gridbar{ flex:0 0 auto; display:flex; align-items:center; justify-content:flex-start; padding:4px 8px; border-top:1px solid #e5e7eb; background:#fff; gap:8px; white-space:nowrap; }
-.gridbar .gb-left,.gridbar .gb-right{ display:flex; align-items:center; gap:6px; flex-wrap:nowrap; }
+.gridbar{ flex:0 0 auto; display:flex; align-items:center; justify-content:flex-start; padding:2px 6px; border-top:1px solid #e5e7eb; background:#fff; gap:6px; white-space:nowrap; }
+.gridbar .gb-left,.gridbar .gb-right{ display:flex; align-items:center; gap:4px; flex-wrap:nowrap; }
 .gridbar .gb-right{ margin-left:auto; }
 .gridbar .sep{ width:1px; height:18px; background:#e5e7eb; margin:0 4px; }
-.gridbar .icon-btn{ width:24px; height:24px; border:0; border-radius:6px; background:#fff; color:#374151; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
+.gridbar .icon-btn{ width:20px; height:20px; border:0; border-radius:4px; background:#fff; color:#374151; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; }
 .gridbar .icon-btn.info{ background:#e6f0ff; border-color:#c7d2fe; color:#0b57d0; }
 .gridbar .icon-btn.warn{ background:#fff1f2; border-color:#fecaca; color:#b91c1c; }
 .gridbar .icon-btn.active{ box-shadow: 0 0 0 2px rgba(59,130,246,.25) inset; }
-.gridbar input[type="number"]{ width:56px; height:24px; border:1px solid #e5e7eb; border-radius:6px; padding:2px 6px; font-size:12px; }
-.gridbar select{ height:24px; border:1px solid #e5e7eb; border-radius:6px; padding:2px 22px 2px 6px; font-size:12px; }
+.gridbar input[type="number"]{ width:48px; height:22px; border:1px solid #e5e7eb; border-radius:4px; padding:2px 4px; font-size:12px; }
+.gridbar select{ height:22px; border:1px solid #e5e7eb; border-radius:4px; padding:2px 18px 2px 6px; font-size:12px; }
 .gridbar .muted{ color:#64748b; font-size:12px; }
 
 .inspector{ border-left:1px solid #e5e7eb; background:#fff; display:flex; flex-direction:column; align-self:stretch; position: sticky; top: 0; height: 100%; max-height: 100%; overflow: auto; }

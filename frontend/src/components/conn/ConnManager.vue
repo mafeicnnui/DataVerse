@@ -11,8 +11,9 @@
       :dict-env="dictEnv"
       :dict-status="dictStatus"
       :editing="editing"
-      v-model="form"
+      :model-value="form"
       :form-key="formKey"
+      @update:modelValue="val => Object.assign(form, val || {})"
       @submit="onSubmit"
       @close="closeModal"
     />
@@ -241,12 +242,9 @@ function onConsole(item) {
   try {
     const label = item.description || `${item.ip}:${item.port}` || `#${item.id}`
     message.value = `正在打开控制台: ${label}`
-    
-    // 发送自定义事件到主应用
     window.dispatchEvent(new CustomEvent('open-console', {
       detail: { connId: item.id }
     }))
-    
     message.value = `已打开控制台: ${label}`
   } catch (e) {
     message.value = `打开控制台失败: ${e.message}`

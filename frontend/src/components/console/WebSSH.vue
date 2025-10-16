@@ -71,7 +71,7 @@ function colorizePromptIfAny(text){
     const last = parts[parts.length-1]
     // 匹配 [user@host path]$ 或 # 结尾
     // 允许可选的环境名前缀，如 "(base) "，再跟标准的 [user@host path] 提示符
-    const m = last.match(/^\s*(?:\([^()\r\n]{1,32}\)\s*)?\[([^@\]\r\n]{1,64})@([^\]\s\r\n]{1,128})\s+([^\]\r\n]{1,256})\]\s*([#$%]\s*)?$/)
+    const m = last.match(/^\s*(?:\([^()\r\n]{1,32}\)\s*)?\([^@\]\r\n]{1,64}\)@([^\]\s\r\n]{1,128})\s+([^\]\r\n]{1,256})\]\s*([#$%]\s*)?$/)
     if (!m) return text
     const [, user, host, path, tail = ''] = m
     const colored = `${ANSI.green}${user}${ANSI.reset}`
@@ -79,9 +79,7 @@ function colorizePromptIfAny(text){
       + `${ANSI.blue}${host}${ANSI.reset}`
       + ' '
       + `${ANSI.cyan}${path}${ANSI.reset}`
-    // 这里不再额外追加 tail，last 已经包含了尾部的符号（$/#/% 等），避免出现重复的 "$ $"
     const rebuilt = last.replace(/\[[^\]]*\]/, `[${colored}]`)
-    // 用重建后的彩色行替换原最后一行
     parts[parts.length-1] = rebuilt
     return parts.join('\r\n')
   } catch {
@@ -151,7 +149,6 @@ function connect() {
       if (props.showConnectBanner) {
         term?.write('Connection established.\r\n')
         term?.write("To escape to local shell, press 'Ctrl+Alt+]'.\r\n\r\n")
-        // 自定义或自动生成的登录横幅
         const lines = []
         if (props.customBanner && props.customBanner.trim()) {
           lines.push(props.customBanner.trim())
@@ -175,12 +172,9 @@ function connect() {
         }
       }
     } catch {}
-    // 连接时不再主动发送回车，完全交由远端 shell 自行输出提示符
-    // 如需确保提示符包含当前目录，可选地设置远端 PS1（bash/sh），默认关闭以避免侧效应
+    // 可选：设置 PS1（默认关闭）
     try {
       if (props.setPromptWithPath && ws && ws.readyState === WebSocket.OPEN) {
-        // 对常见 bash/sh：设置 PS1 为 [\u@\h \w]\$ （不包含颜色，颜色由本地渲染负责）
-        // 使用 printf 而非 echo，避免额外换行
         const cmd = "export PS1='[\\u@\\h \\w]\\$ '" + '\r'
         ws.send(cmd)
       }
@@ -436,7 +430,6 @@ function isVisible(el){
   const rect = el.getBoundingClientRect?.()
   if (!rect) return false
   const hasSize = rect.width > 0 && rect.height > 0
-  // display:none 元素的 offsetParent 通常为 null
   const displayed = el.offsetParent !== null || (rect.width > 0 && rect.height > 0)
   return hasSize && displayed
 }
@@ -458,12 +451,13 @@ function doFit() {
 
 onMounted(() => {
   term = new Terminal({
-    convertEol: true,
+    convertEol: false,
     cursorBlink: true,
     cursorStyle: 'block',
     fontFamily: 'Menlo, Consolas, monospace',
-    fontSize: (window.__dv_font_mono_px || 14),
-    lineHeight: 1.2,
+    fontSize: (window.__dv_font_mono_px || 15),
+    lineHeight: 1.0,
+    windowsMode: true,
     theme: {
       background: '#0b1021',
       foreground: '#e6e6e6',
@@ -492,27 +486,49 @@ onMounted(() => {
   term.loadAddon(fitAddon)
   term.open(termEl.value)
   term.focus()
+
+  // 同步 xterm 的 resize 事件到后端，避免尺寸不同步造成折行/回车重绘
+  try {
+    term.onResize(({ cols, rows }) => {
+      try {
+        if (ws && ws.readyState === WebSocket.OPEN && cols >= 20 && rows >= 2) {
+          ws.send(`__RESIZE__:${cols}x${rows}`)
+        }
+      } catch {}
+    })
+  } catch {}
+
+  // 在渲染初期与字体就绪后多次触发 fit + resize，提高初次同步成功率
+  const burstFit = () => { try { doFit() } catch {} }
+  // 立即 & 下一个动画帧 & 若干延迟重试
+  burstFit()
+  try { requestAnimationFrame(burstFit) } catch {}
+  setTimeout(burstFit, 50)
+  setTimeout(burstFit, 180)
+  setTimeout(burstFit, 400)
+  setTimeout(burstFit, 800)
+  // 字体加载就绪后再 fit 一次
+  try { document?.fonts?.ready?.then(() => setTimeout(burstFit, 0)) } catch {}
+
   // 监听全局字体缩放
   try {
     const onScale = (e) => {
       try {
-        const mono = (e?.detail?.monoPx) || (window.__dv_font_mono_px) || 14
+        const mono = (e?.detail?.monoPx) || (window.__dv_font_mono_px) || 15
         term?.setOption('fontSize', mono)
-        // 调整后重新 fit，避免断行
         setTimeout(() => { try { doFit() } catch {} }, 0)
       } catch {}
     }
     window.addEventListener('dv-fontscale-change', onScale)
     wrap.value.__onFontScale = onScale
   } catch {}
-  // 阻止浏览器快捷键（F12/F5/Ctrl+R/Ctrl+Shift+I 等）透传到远端
+  // 阻止浏览器快捷键透传
   try{
     term.attachCustomKeyEventHandler((e)=>{
       const k = e.key
       const ctrl = !!e.ctrlKey
       const shift = !!e.shiftKey
       const alt = !!e.altKey
-      // 断开快捷键：Ctrl + Alt + ]（在 xterm 层也拦截，避免被透传）
       if (ctrl && alt && (k === ']' || e.code === 'BracketRight')){
         try { e.preventDefault?.() } catch {}
         try { ws && ws.close() } catch {}
@@ -520,12 +536,10 @@ onMounted(() => {
         try { term?.write("\r\n[Disconnected by Ctrl+Alt+]]\r\n") } catch {}
         return false
       }
-      // DevTools & 刷新相关：让浏览器自己处理，但不要让 xterm 产生命令序列
       if (k === 'F12') return false
       if (k === 'F5') return false
       if (ctrl && (k === 'r' || k === 'R')) return false
       if (ctrl && shift && (k === 'I' || k === 'J' || k === 'C')) return false
-      // 常见系统快捷键（避免误传）：Ctrl+Shift+R、Ctrl+F5、Alt+F4（不阻止浏览器默认，仅阻止传给 xterm）
       if (ctrl && shift && (k === 'R' || k === 'F5')) return false
       if (alt && k === 'F4') return false
       return true
@@ -536,55 +550,46 @@ onMounted(() => {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(data)
       lastInputAt = Date.now()
-      // 累积输入字符，检测 exit 命令
-      if (data.charCodeAt(0) === 13) { // 回车键
+      if (data.charCodeAt(0) === 13) {
         if (inputBuffer.trim() === 'exit') {
           setTimeout(() => {
-            // 通过自定义事件通知父组件关闭控制台
             window.dispatchEvent(new CustomEvent('webssh-exit'))
-          }, 1000) // 延迟1秒等待服务器响应
+          }, 1000)
         }
         inputBuffer = ''
-      } else if (data.charCodeAt(0) === 127 || data.charCodeAt(0) === 8) { // 退格键
+      } else if (data.charCodeAt(0) === 127 || data.charCodeAt(0) === 8) {
         inputBuffer = inputBuffer.slice(0, -1)
-      } else if (data.charCodeAt(0) >= 32) { // 可见字符
+      } else if (data.charCodeAt(0) >= 32) {
         inputBuffer += data
       }
     }
   })
   const ro = new ResizeObserver(() => {
     try {
-      // 仅当容器可见且有尺寸时才 fit
       if (isVisible(wrap.value)) doFit()
     } catch {}
   })
   ro.observe(wrap.value)
-  // 缓存以便卸载
   wrap.value.__ro = ro
 
   connect()
-  setTimeout(doFit, 50)
+  setTimeout(() => { try { doFit(); term?.refresh(0, term.rows-1) } catch {} }, 50)
 
-  // 监听外层的 tab 激活事件，记录时间，用于短暂过滤异常回显
   const onTabActive = (e) => {
     try {
       const id = e?.detail?.tabId || ''
       if (!props.tabId || !id) return
       if (id === props.tabId) {
         reactivatedAt = Date.now()
-        // 重置缓冲
         reactBuf = ''
         if (reactBufTimer) { try { clearTimeout(reactBufTimer) } catch {} ; reactBufTimer = null }
-        // 重新计算并同步终端尺寸，避免提示符被折行
         try { doFit() } catch {}
       }
     } catch {}
   }
   window.addEventListener('tab-activated', onTabActive)
-  // 存起来便于卸载
   wrap.value.__onTabActive = onTabActive
 
-  // 实现 Xshell 风格的断开快捷键：Ctrl + Alt + ]
   const onKeyDown = (e) => {
     try {
       const isCtrl = !!e.ctrlKey
@@ -594,7 +599,6 @@ onMounted(() => {
         e.preventDefault()
         try { ws && ws.close() } catch {}
         try { window.dispatchEvent(new CustomEvent('webssh-exit', { detail: { tabId: props.tabId || '' } })) } catch {}
-        // 本地提示（不向远端发送）
         try { term?.write("\r\n[Disconnected by Ctrl+Alt+]]\r\n") } catch {}
       }
     } catch {}
