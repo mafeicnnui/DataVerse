@@ -1,7 +1,7 @@
 <template>
-  <div class="app-layout" :class="{ collapsed: sidebarCollapsed }" :style="layoutStyle">
+  <div class="app-layout" :class="{ collapsed: sidebarCollapsed }" :style="layoutStyle" :data-theme="theme" ref="appLayoutRef">
     <!-- 左侧菜单区 -->
-    <aside class="sidebar">
+    <aside class="sidebar" ref="sidebarRef" :style="sidebarInlineStyle">
       <div class="brand" title="星辰疆域，数据宇宙">
         <img src="/dataverse_logo.png" alt="DataVerse" class="brand-logo" />
         <span class="brand-name">辰域运维平台</span>
@@ -10,7 +10,10 @@
         <ul>
           <li :class="{active: activeTab==='conn'}" @click="openTab('conn','连接管理')">
             <span class="mi" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7.5 13A3.5 3.5 0 0 1 11 9.5h2v2h-2a1.5 1.5 0 1 0 0 3h2v2h-2A3.5 3.5 0 0 1 7.5 13Zm5.5-3h2a3.5 3.5 0 1 1 0 7h-2v-2h2a1.5 1.5 0 1 0 0-3h-2v-2Zm-2 3h2v2h-2v-2Z"/></svg>
+              <!-- 更清晰的链路图标，尺寸 20px -->
+              <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px">
+                <path d="M8.5 13.5a3 3 0 0 1 0-4.24l3-3a3 3 0 0 1 4.24 4.24l-.88.88-1.41-1.41.88-.88a1 1 0 0 0-1.41-1.41l-3 3a1 1 0 1 0 1.41 1.41l.29-.29 1.41 1.41-.29.29a3 3 0 0 1-4.24 0Zm7 7a3 3 0 0 1-4.24 0l-1.17-1.17 1.41-1.41 1.17 1.17a1 1 0 0 0 1.41-1.41l-3-3a1 1 0 1 0-1.41 1.41l.88.88-1.41 1.41-.88-.88a3 3 0 0 1 4.24-4.24l3 3a3 3 0 0 1 0 4.24Z"/>
+              </svg>
             </span>
             <span>连接管理</span>
           </li>
@@ -77,18 +80,11 @@
         </ul>
       </nav>
     </aside>
-
-    <!-- 折叠/展开按钮：独立于侧栏，固定在布局左缘中部，始终可见 -->
-    <button
-      class="toggle-btn"
-      :title="sidebarCollapsed ? '展开菜单(>)' : '收起菜单(<)'"
-      :aria-label="sidebarCollapsed ? '展开菜单' : '收起菜单'"
-      @click="sidebarCollapsed = !sidebarCollapsed">
-      <span class="arrow-text">{{ sidebarCollapsed ? '>' : '<' }}</span>
-    </button>
+    <!-- 侧栏右侧拖拽条（替代折叠按钮） -->
+    <div class="sidebar-resizer" @mousedown="startResizeSidebar" title="拖动调整侧栏宽度"></div>
 
     <!-- 右侧预览区 -->
-    <main class="preview" ref="previewRef">
+    <main class="preview" ref="previewRef" :style="`padding-left:${contentPad}px !important; padding-right:${contentPad}px !important;`">
       <!-- 顶部信息栏：时间/农历 | 天气/建议 | 头像 -->
       <header class="top-info">
         <div class="info-left">
@@ -99,11 +95,17 @@
           <div class="advice" v-if="adviceText">{{ adviceText }}</div>
         </div>
         <div class="info-right">
+          <select class="theme-select" v-model="theme" title="主题">
+            <option value="lightBlue">浅蓝</option>
+            <option value="grayBlue">灰蓝</option>
+            <option value="mint">淡紫</option>
+            <option value="pure">纯色</option>
+          </select>
           <img class="avatar" src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f431.png" alt="" loading="lazy" decoding="async" @error="onAvatarError" />
         </div>
       </header>
 
-      <!-- 标签栏 -->
+      <!-- 标签栏：还原为修改前的简单样式 -->
       <div class="tabs-bar">
         <div v-for="t in tabs" :key="t.key" class="tab-item" :class="{active: t.key===activeTab}" @click="switchTab(t.key)">
           <span class="tab-title">{{ t.title }}</span>
@@ -485,6 +487,92 @@ import { EditorView, keymap, highlightActiveLine } from '@codemirror/view'
 import { autocompletion, CompletionContext } from '@codemirror/autocomplete'
 import { sql, MySQL } from '@codemirror/lang-sql'
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
+
+// ===== 主题切换（四套方案，仅作用于侧栏背景与分隔线） =====
+const theme = ref('lightBlue')
+const sidebarRef = ref(null)
+const themePresets = {
+  lightBlue: {
+    '--sidebar-bg': 'linear-gradient(180deg, #e9f2ff 0%, #d9e8ff 100%)',
+    '--sidebar-border': '#cfe0ff'
+  },
+  grayBlue: {
+    '--sidebar-bg': 'linear-gradient(180deg, #f0f2f5 0%, #e3e7ee 100%)',
+    '--sidebar-border': '#cfd5e1'
+  },
+  mint: {
+    '--sidebar-bg': 'linear-gradient(180deg, #f4e9ff 0%, #ead8ff 100%)',
+    '--sidebar-border': '#ddc8ff'
+  },
+  pure: {
+    '--sidebar-bg': '#f7f7f7',
+    '--sidebar-border': '#e1e1e1'
+  }
+}
+function applyTheme(name) {
+  const vars = themePresets[name] || themePresets.lightBlue
+  const root = document.documentElement
+  Object.entries(vars).forEach(([k, v]) => {
+    try { root.style.setProperty(k, v) } catch {}
+    try { sidebarRef.value && sidebarRef.value.style.setProperty(k, v) } catch {}
+  })
+  try { localStorage.setItem('dv-theme', name) } catch {}
+}
+onMounted(() => {
+  try {
+    const saved = localStorage.getItem('dv-theme')
+    if (saved && themePresets[saved]) theme.value = saved
+  } catch {}
+  applyTheme(theme.value)
+})
+watch(() => theme.value, v => applyTheme(v))
+const sidebarInlineStyle = computed(() => {
+  const vars = themePresets[theme.value] || themePresets.lightBlue
+  return { background: vars['--sidebar-bg'], borderRightColor: vars['--sidebar-border'] }
+})
+
+// ===== 侧栏宽度拖拽 =====
+const contentPad = ref(16)
+const appLayoutRef = ref(null)
+const isResizingSidebar = ref(false)
+function setSidebarW(px) {
+  const min = 150, max = 360
+  const n = Math.max(min, Math.min(max, Math.round(px)))
+  try {
+    const host = appLayoutRef.value || document.documentElement
+    host.style.setProperty('--sidebar-w', n + 'px')
+    // 直接同步 grid 模板，确保立即重排
+    try { host.style.gridTemplateColumns = n + 'px 1fr' } catch {}
+    // 同步侧栏节点自身宽度，避免子元素因最小宽度导致滞后
+    try {
+      if (sidebarRef.value) {
+        sidebarRef.value.style.width = n + 'px'
+        sidebarRef.value.style.minWidth = n + 'px'
+        sidebarRef.value.style.maxWidth = n + 'px'
+      }
+    } catch {}
+    localStorage.setItem('dv-sidebar-w', String(n))
+  } catch {}
+}
+function startResizeSidebar(e) {
+  try { e.preventDefault() } catch {}
+  isResizingSidebar.value = true
+  const rect = (appLayoutRef.value || document.body).getBoundingClientRect()
+  const onMove = (ev) => {
+    const x = ev.clientX - rect.left
+    setSidebarW(x)
+  }
+  const onUp = () => {
+    isResizingSidebar.value = false
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+  }
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
+}
+onMounted(() => {
+  try { const saved = parseInt(localStorage.getItem('dv-sidebar-w') || '') ; if (!Number.isNaN(saved)) setSidebarW(saved) } catch {}
+})
 
 // --- 控制台模态：状态与方法（移入 <script setup>，使用纯 JS） ---
 const consoleModal = reactive({ open: false, connId: null })
@@ -2883,35 +2971,22 @@ const filteredList = computed(() => {
 
 <style scoped>
 /* 使用变量管理侧栏宽度，折叠为 0 完全隐藏 */
-.app-layout { --sidebar-w: 200px; display: grid; grid-template-columns: var(--sidebar-w) 1fr; height: 100vh; transition: grid-template-columns .2s ease; }
+.app-layout { --sidebar-w: 200px; --content-pad-left: 16px; display: grid; grid-template-columns: var(--sidebar-w) 1fr; height: 100vh; transition: grid-template-columns .2s ease; }
 .app-layout.collapsed { --sidebar-w: 0px; grid-template-columns: 0 1fr; }
 
 /* 侧栏采用 flex 布局，滚动交给 nav 区域 */
-.sidebar { position: relative; border-right: 1px solid #dcdcdc; padding: 16px 16px 16px 20px; background: #fafafa; box-shadow: 2px 0 8px rgba(0,0,0,0.06); overflow: hidden; display: flex; flex-direction: column; }
+.sidebar { position: relative; border-right: 1px solid var(--sidebar-border, #e4e8f5); padding: 16px 16px 16px 20px; background: var(--sidebar-bg, linear-gradient(180deg, #f5f8ff 0%, #eef4ff 100%)); box-shadow: 2px 0 8px rgba(0,0,0,0.04); overflow: hidden; display: flex; flex-direction: column; }
 .sidebar nav { flex: 1; overflow: auto; }
 .app-layout.collapsed .brand-name { display: none; }
 /* 折叠时彻底隐藏侧栏本体，避免残留细线或空隙 */
 .app-layout.collapsed .sidebar { display: none; border: 0; padding: 0; box-shadow: none; }
 
-/* 折叠/展开按钮固定在左缘中部，尺寸更小且不加粗 */
+/* 侧栏拖拽条 */
 .app-layout { --sidebar-w: 200px; position: relative; display: grid; grid-template-columns: var(--sidebar-w) 1fr; height: 100vh; transition: grid-template-columns .2s ease; }
-.toggle-btn {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 100;
-  left: var(--sidebar-w);
-  margin-left: -11px; /* 左侧多出 2px */
-  width: 18px; height: 36px;
-  border-radius: 0 8px 8px 0;
-  border: 1px solid #e6e6e6;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-  display: flex; align-items: center; justify-content: center; color: #0b57d0;
-}
-.app-layout.collapsed .toggle-btn { left: var(--sidebar-w); margin-left: 0; }
-.toggle-btn .arrow-text { font-size: 14px; line-height: 1; padding: 0 2px; font-weight: 300; }
-.arrow-text { font-size: 18px; font-weight: 300; line-height: 1; }
+.sidebar-resizer { position: absolute; top: 0; left: var(--sidebar-w); width: 2px; height: 100%; cursor: col-resize; z-index: 120; background: transparent; }
+.sidebar-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 1px; background: rgba(0,0,0,0.06); }
+/* 隐藏旧的折叠按钮 */
+.toggle-btn { display: none !important; }
 
 /* 预览区在任何状态都保持可见并占满可用空间 */
 .app-layout main.preview { display: block; min-width: 0; min-height: 0; grid-column: 2; grid-row: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding-bottom: 0; margin-bottom: 0; }
@@ -2944,15 +3019,49 @@ const filteredList = computed(() => {
 .brand-name { font-size: 14px; font-weight: 700; }
 /* 恢复菜单区原样式 */
 .sidebar ul { list-style: none; padding: 0; margin: 0; }
-.sidebar li { display:block; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; color: #0b57d0; box-sizing: border-box; margin: 0; }
-.sidebar li > .mi { width: 18px; height: 18px; margin-right: 8px; display:inline-flex; align-items:center; justify-content:center; vertical-align: middle; }
-.sidebar li > .mi svg { width: 18px; height: 18px; }
+.sidebar li { display:block; padding: 8px 12px; border-radius: 10px; cursor: pointer; font-size: 14px; color: #1e40af; box-sizing: border-box; margin: 0; font-weight: 500; letter-spacing: .1px; }
+.sidebar li > .mi { width: 18px; height: 18px; margin-right: 8px; display:inline-flex; align-items:center; justify-content:center; vertical-align: middle; color: inherit; opacity: .9; }
+.sidebar li > .mi svg { width: 18px; height: 18px; fill: currentColor; color: inherit; }
 .sidebar li.group { display:block; padding: 0; }
 /* 菜单从上到下展示，水平居中 */
 .sidebar { display: flex; flex-direction: column; align-items: stretch; }
 .sidebar nav { flex: 1; display: flex; flex-direction: column; width: 100%; }
 .sidebar nav > ul { margin-top: 0; margin-bottom: 0; display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
-.sidebar li { width: 100%; text-align: left; }
+.sidebar li { width: 100%; text-align: left; transition: background .15s ease, color .15s ease; }
+/* 悬停：文字与图标略提亮，背景更浅，避免描边和左侧竖线 */
+.sidebar li:hover { background: rgba(255,255,255,.55) !important; color: #0b57d0; }
+.sidebar li:hover > .mi { opacity: 1; }
+/* 选中：白底卡片 + 主色文字，适配浅色渐变背景，不加边框 */
+.sidebar li.active { background: rgba(255,255,255,.9) !important; color: #0b57d0 !important; font-weight: 450; }
+.sidebar li.active > .mi { opacity: 1; }
+/* 侧栏菜单项：移除悬停/聚焦时的矩形描边与左侧粗竖线 */
+.sidebar li,
+.sidebar li * { outline: none !important; }
+.sidebar li { border: none !important; border-left: none !important; box-shadow: none !important; }
+.sidebar li:hover,
+.sidebar li:focus,
+.sidebar li:focus-visible,
+.sidebar li:active { border: none !important; border-left: none !important; outline: none !important; box-shadow: none !important; }
+.sidebar li::before,
+.sidebar li::after { display: none !important; content: none !important; }
+.sidebar li.active { border: none !important; box-shadow: none !important; }
+/* 侧栏展开菜单：去掉周边边框/投影，保持干净 */
+.sidebar li.group { border: none !important; box-shadow: none !important; background: transparent !important; }
+.sidebar .group .group-title { border: none !important; box-shadow: none !important; background: transparent !important; color: #1e40af; font-weight: 450; }
+.sidebar .group .sub { list-style: none; margin: 4px 0 0 28px; padding: 6px 0; border: none !important; box-shadow: none !important; background: transparent !important; }
+.sidebar .group .sub li { border: none !important; box-shadow: none !important; background: transparent !important; padding-left: 0; color: #1f3b8a; font-size: 13.5px; border-radius: 8px; }
+.sidebar .group .sub li:hover { background: rgba(255,255,255,.5) !important; color: #0b57d0; }
+.sidebar .group .sub li.active { background: rgba(255,255,255,.85) !important; border: none !important; color: #0b57d0; font-weight: 450; }
+/* 去掉展开分组左侧的竖线（可能由边框或伪元素绘制） */
+.sidebar .group, .sidebar .group * { outline: none !important; }
+.sidebar .group, .sidebar .group .sub { border-left: none !important; }
+.sidebar .group::before,
+.sidebar .group::after,
+.sidebar .group .sub::before,
+.sidebar .group .sub::after,
+.sidebar .group .sub li::before,
+.sidebar .group .sub li::after { display: none !important; content: none !important; }
+.sidebar .group .sub li { border-left: none !important; position: relative; }
 /* 预览区顶部信息栏 */
 .top-info { display: grid; grid-template-columns: 1fr 1.5fr auto; gap: 12px; align-items: center; padding: 10px 12px; background: #f7f9fc; border: 1px solid #e5eaf2; border-radius: 10px; margin-bottom: 10px; }
 .top-info .datetime { font-weight: 400; color: #0b57d0; white-space: nowrap; font-size: 14px; }
@@ -2963,13 +3072,31 @@ const filteredList = computed(() => {
 .top-info .info-center .weather, .top-info .info-center .advice { white-space: inherit; }
 .top-info .avatar { width: 32px; height: 32px; border-radius: 50%; border: 1px solid #d0d7de; box-shadow: 0 1px 3px rgba(0,0,0,0.08); background:#fff; object-fit: contain; }
 /* 标签栏 */
-.tabs-bar { display: flex; align-items: center; gap: 6px; padding: 6px 6px 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 8px; }
+.tabs-bar { position: relative; display: flex; align-items: center; gap: 6px; padding: 6px 6px 0; background: transparent; border-bottom: 1px solid #e5e7eb; margin-bottom: 8px; overflow: visible; }
+/* 彻底禁用 Chrome 风格辅助线与伪元素 */
+.tabs-bar::before, .tabs-bar::after, .tabs-seam-hline { display: none !important; content: none !important; }
+/* Chrome 风格：略带弧度的顶部圆角、活动项抬起且覆盖底部分隔线 */
 .tab-item { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; padding-right: 24px; background: #f3f4f6; border: 1px solid #e5e7eb; border-bottom: none; border-top-left-radius: 8px; border-top-right-radius: 8px; cursor: pointer; color: #0b57d0; font-size: 14px; font-weight: 400; }
-.tab-item.active { background: #ffffff; color: #0b57d0; border-color: #c7d2fe; z-index: 2; }
-.tab-title { display: block; max-width: 200px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-/* 缩小关闭按钮并放在右上角 */
-.tab-close { position: absolute; top: 3px; right: 4px; width: 14px; height: 14px; font-size: 12px; line-height: 12px; display: inline-flex; align-items: center; justify-content: center; border-radius: 3px; font-weight: 600; opacity: .6; pointer-events: auto; }
-.tab-close:hover { background: #e5e7eb; opacity: 1; }
+/* 相邻标签无间隙，使用左边框形成连续分隔线（Chrome 风格） */
+.tab-item + .tab-item { margin-left: 0; }
+.tab-item:hover { background: #e6ebff; }
+.tab-item.active { background: #ffffff; color: #0b57d0; border-color: #c7d2fe; z-index: 2; box-shadow: none; }
+.tab-title { display: block; max-width: 220px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+/* 左右两侧过渡：用伪元素把外边缘与标签栏底色平滑连接，形成 Chrome 弧形缝隙效果 */
+/* 去除所有伪元素弧形与辅助线 */
+.tab-item::before, .tab-item::after { display: none; content: none; }
+/* 关闭按钮：仅在悬停或激活时清晰可见，圆形，靠右上角 */
+.tab-close {
+  position: absolute; top: 4px; right: 6px;
+  width: 18px; height: 18px; border-radius: 50%;
+  font-size: 12px; line-height: 18px; text-align: center;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #475569; background: transparent; border: none;
+  opacity: .0; transition: background .15s ease, opacity .15s ease;
+  pointer-events: auto;
+}
+.tab-item:hover .tab-close, .tab-item.active .tab-close { opacity: .9; }
+.tab-close:hover { background: #e5e7eb; }
 .sidebar li.active { background: #eef4ff; color: #0b57d0; }
 .sidebar li:hover { background: #f3f3f3; }
 .sidebar .group .group-title { display:block; width: 100%; box-sizing: border-box; margin: 0; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
@@ -2985,8 +3112,8 @@ const filteredList = computed(() => {
 .sidebar .arrow.open { transform: rotate(270deg); }
 .preview { overflow: auto; }
 .container { width: 100%; max-width: none; margin: 16px 0; padding: 0 0; }
-.preview { padding: 0 25px; }
-.app-layout.collapsed .preview { padding: 0 25px; }
+.preview { padding: 0 var(--content-pad-left) 0 var(--content-pad-left) !important; }
+.app-layout.collapsed .preview { padding: 0 var(--content-pad-left) 0 var(--content-pad-left) !important; }
 h1 { margin-bottom: 16px; }
 .form-section { margin-bottom: 24px; }
 .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
