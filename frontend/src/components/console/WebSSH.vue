@@ -97,6 +97,14 @@ function buildWsUrl() {
     pass: String(props.pass || ''),
     auth: String(props.auth || 'password'),
   })
+  // 若前端已能计算出初始列/行，则一起带上，便于后端在创建 pty 时使用准确尺寸
+  try {
+    const size = getApproxColsRows()
+    if (size && size.cols && size.rows) {
+      q.set('cols', String(size.cols))
+      q.set('rows', String(size.rows))
+    }
+  } catch {}
   if ((props.auth || 'password') === 'key') {
     try {
       const key_b64 = btoa(props.privateKey || '')
@@ -447,6 +455,29 @@ function doFit() {
       ws.send(`__RESIZE__:${cols}x${rows}`)
     }
   } catch {}
+}
+
+// 在连接前也尽量估算一次列/行，供 buildWsUrl 使用
+function getApproxColsRows(){
+  try {
+    // 若 xterm 已初始化，直接用实际 cols/rows
+    if (term && fitAddon) {
+      if (isVisible(wrap.value)) { try { fitAddon.fit() } catch {} }
+      return { cols: term.cols || 120, rows: term.rows || 32 }
+    }
+    // 未初始化时，基于容器像素尺寸与等宽字体估算
+    const el = termEl.value || wrap.value || document.body
+    const rect = el?.getBoundingClientRect?.()
+    const width = (rect?.width || 960)
+    const height = (rect?.height || 480)
+    const fontSize = (window.__dv_font_mono_px || 15)
+    // 经验：等宽字体宽度约为 0.6~0.65 个 fontSize，这里取 0.6 更保守
+    const chW = Math.max(7, Math.floor(fontSize * 0.6))
+    const chH = Math.max(12, Math.floor(fontSize * 1.0))
+    const cols = Math.max(80, Math.floor(width / chW))
+    const rows = Math.max(24, Math.floor(height / chH))
+    return { cols, rows }
+  } catch { return { cols: 120, rows: 32 } }
 }
 
 onMounted(() => {

@@ -13,7 +13,7 @@ from io import BytesIO
 
 router = APIRouter(prefix="/api/ssh", tags=["ssh"])
 
-async def _ssh_handler(ws: WebSocket, host: str, port: int, username: str, password: str, auth: str = 'password', key_b64: Optional[str] = None, key_pass: Optional[str] = None):
+async def _ssh_handler(ws: WebSocket, host: str, port: int, username: str, password: str, auth: str = 'password', key_b64: Optional[str] = None, key_pass: Optional[str] = None, init_cols: int = 120, init_rows: int = 32):
     conn = None
     proc = None
     try:
@@ -46,13 +46,13 @@ async def _ssh_handler(ws: WebSocket, host: str, port: int, username: str, passw
         # 优先显式启动登录 shell，部分环境默认不回显提示符
         proc = None
         try:
-            proc = await conn.create_process(command='/bin/bash -l', term_type='xterm-256color', term_size=(120, 32))
+            proc = await conn.create_process(command='/bin/bash -l', term_type='xterm-256color', term_size=(init_cols or 120, init_rows or 32))
         except Exception:
             try:
-                proc = await conn.create_process(command='/bin/sh -l', term_type='xterm-256color', term_size=(120, 32))
+                proc = await conn.create_process(command='/bin/sh -l', term_type='xterm-256color', term_size=(init_cols or 120, init_rows or 32))
             except Exception:
                 # 兜底：不指定命令，使用远端默认 shell
-                proc = await conn.create_process(term_type='xterm-256color', term_size=(120, 32))
+                proc = await conn.create_process(term_type='xterm-256color', term_size=(init_cols or 120, init_rows or 32))
         # 不再在连接后主动发送回车，避免产生额外的空行/重复提示符
 
         async def from_client():
@@ -198,12 +198,21 @@ async def ssh_ws(ws: WebSocket):
     auth = q.get('auth') or 'password'
     key_b64 = q.get('key_b64')
     key_pass = q.get('key_pass')
+    # 初始终端尺寸（可选）
+    try:
+        init_cols = int(q.get('cols') or 120)
+    except Exception:
+        init_cols = 120
+    try:
+        init_rows = int(q.get('rows') or 32)
+    except Exception:
+        init_rows = 32
     if not host or not username:
         await ws.accept()
         await ws.send_text('[ERROR] missing host/user')
         await ws.close()
         return
-    await _ssh_handler(ws, host, port, username, password or '', auth=auth, key_b64=key_b64, key_pass=key_pass)
+    await _ssh_handler(ws, host, port, username, password or '', auth=auth, key_b64=key_b64, key_pass=key_pass, init_cols=init_cols, init_rows=init_rows)
 
 # ========== SFTP 辅助：建立一次性连接并返回 conn 与 sftp ==========
 async def _connect_sftp(host: str, port: int, username: str, password: str = '', auth: str = 'password', key_b64: Optional[str] = None, key_pass: Optional[str] = None):
